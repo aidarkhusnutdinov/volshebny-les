@@ -164,9 +164,9 @@ const BOSS_DATA = {
   },
   kalin: {
     name: "КАЛИН-ЦАРЬ",
-    hp: 650,
-    dmg: 22,
-    speed: 85,
+    hp: 3600,
+    dmg: 42,
+    speed: 108,
     weapon: "mace",
     xp: 500,
   },
@@ -361,6 +361,7 @@ let birdTimer = 5,
 let pools = []; // отравленные лужи говённого человека
 let alarmOn = false,
   gateHintT = 0; // тревога в замке и напоминание о запертых вратах
+let kalinAlerted = false; // раз включившись при входе в замок, держится до смерти Калина
 let metKinds; // какие виды врагов уже встречены (для подписи при первой встрече)
 let playerName = localStorage.getItem("bogatyr_name") || "Добрыня";
 const keys = {};
@@ -473,6 +474,7 @@ function newGame() {
   gameTime = 0;
   alarmOn = false;
   AudioSys.alarmStop();
+  kalinAlerted = false;
   gateHintT = 0;
   logEl.innerHTML = "";
 
@@ -630,7 +632,7 @@ function newGame() {
         const x = (2 + rnd() * (MAP_W - 4)) * TILE,
           y = (2 + rnd() * (MAP_H - 4)) * TILE;
         if (!world.passable(x, y)) continue;
-        if (Math.hypot(x - world.castle.cx, y - world.castle.cy) < 400)
+        if (Math.hypot(x - world.castle.cx, y - world.castle.cy) < 520)
           continue;
         animals.push({
           sp,
@@ -664,7 +666,7 @@ function newGame() {
           y = (2 + rnd() * (MAP_H - 4)) * TILE;
         if (!world.passable(x, y)) continue;
         if (Math.hypot(x - world.spawn.x, y - world.spawn.y) < 850) continue; // не у старта
-        if (Math.hypot(x - world.castle.cx, y - world.castle.cy) < 380)
+        if (Math.hypot(x - world.castle.cx, y - world.castle.cy) < 480)
           continue;
         const e = mkEnemy(kind, x, y, {
           name: wd.name,
@@ -875,6 +877,7 @@ function killEnemy(e) {
     kalinDead = true;
     alarmOn = false;
     AudioSys.alarmStop(); // тревога смолкает...
+    world.kalinLockdown = false; // ...ворота больше не заперты
     AudioSys.bossDie();
     AudioSys.fanfare(); // ...и звучит короткая победная
     announce("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН! Земля вздохнула свободно.", "#8fd06a");
@@ -1005,7 +1008,7 @@ function wallBetween(x0, y0, x1, y1) {
       py = y0 + ((y1 - y0) * i) / steps;
     if (world.tileAt(Math.floor(px / TILE), Math.floor(py / TILE)) === T.WALL)
       return true;
-    if (!world.gateOpen) {
+    if (!world.gateOpen || world.kalinLockdown) {
       const g = world.castle.gatePx;
       if (px >= g.x0 && px < g.x1 && py >= g.y0 && py < g.y1) return true;
     }
@@ -2627,9 +2630,15 @@ function update(dt) {
       player.poisonCd <= 0 &&
       Math.hypot(player.x - pl.x, player.y - pl.y) < pl.r
     ) {
-      player.poisonCd = 0.8;
-      directDamage(4, "#7a9a3d", "яд");
-      AudioSys.squelch();
+      if (pl.kind === "crack") {
+        player.poisonCd = 0.6;
+        directDamage(10, "#ff6a4a", "трещина"); // земля горит — от dodge не спастись
+        burst(player.x, player.y, "#8d8d85", 5, 60);
+      } else {
+        player.poisonCd = 0.8;
+        directDamage(4, "#7a9a3d", "яд");
+        AudioSys.squelch();
+      }
     }
   }
 
@@ -2688,11 +2697,15 @@ function update(dt) {
     player.x < (cca.x0 + cca.w) * TILE &&
     player.y > cca.y0 * TILE &&
     player.y < (cca.y0 + cca.h) * TILE;
-  if (inCastle && !kalinDead) {
+  if (inCastle && !kalinDead) kalinAlerted = true;
+  if (kalinAlerted && !kalinDead) {
     if (!alarmOn) {
       alarmOn = true;
+      world.kalinLockdown = true; // ворота захлопываются — придётся драться до конца
       AudioSys.alarmStart();
+      AudioSys.stomp();
       toast("ТЫ В ЛОГОВЕ КАЛИНА-ЦАРЯ!", "#ff5540");
+      announce("Ворота замка захлопнулись — придётся драться до конца!", "#ff5540");
     }
   } else if (alarmOn) {
     alarmOn = false;
@@ -3202,6 +3215,12 @@ function updateEnemies(dt) {
         e.pullT = 1.7;
       }
       if (e.kind === "kalin") {
+        const raged = e.hp < e.maxHp * 0.2;
+        if (raged && !e.raged) {
+          e.raged = true;
+          e.speed *= 1.2;
+          announce("Калин в ярости!", "#ff3020");
+        }
         if (!e.summoned && e.hp < e.maxHp * 0.5) {
           e.summoned = true;
           addLog(
@@ -3221,33 +3240,72 @@ function updateEnemies(dt) {
             e.camp && e.camp.guards && e.camp.guards.push(g);
           }
         }
+        if (raged && !e.summoned2) {
+          e.summoned2 = true;
+          addLog(
+            "Калин-царь в ярости зовёт последних верных нукеров!",
+            "#ff9d7a",
+          );
+          for (let i = 0; i < 3; i++) {
+            const g = mkEnemy("bandit", e.x - 80 + i * 80, e.y + 100, {
+              name: "Ханский нукер",
+              hp: 55,
+              dmg: 10,
+              speed: 125,
+              weapon: "saber",
+              xp: 30,
+            });
+            enemies.push(g);
+            e.camp && e.camp.guards && e.camp.guards.push(g);
+          }
+        }
         if (e.spCd <= 0 && td < 150) {
-          e.spCd = 6;
+          e.spCd = raged ? 2.25 : 4.5;
           AudioSys.stomp();
           shake = 11;
           addLog("Калин-царь ТОПАЕТ — каменные плиты трескаются!", "#ff9d7a");
           if (td < 160) {
-            hurtPlayer(18, e.x, e.y);
+            hurtPlayer(70, e.x, e.y);
           }
           burst(e.x, e.y, "#8d8d85", 16, 130);
+          // трещины остаются на земле и жгут даже того, кто увернулся от самого удара
+          for (let c = 0; c < 2; c++) {
+            const ca = Math.random() * 6.283;
+            pools.push({
+              x: e.x + Math.cos(ca) * (40 + Math.random() * 60),
+              y: e.y + Math.sin(ca) * (40 + Math.random() * 60),
+              r: 40,
+              t: 3.5,
+              max: 3.5,
+              kind: "crack",
+            });
+          }
         } else if (
           e.spCd <= 0 &&
           td < 450 &&
           !wallBetween(e.x, e.y - 20, target.x, target.y - 20)
         ) {
-          e.spCd = 4;
-          const d = td || 1;
-          projectiles.push({
-            x: e.x,
-            y: e.y - 40,
-            vx: ((target.x - e.x) / d) * 320,
-            vy: ((target.y - e.y - 30) / d) * 320,
-            dmg: 14,
-            life: 1.8,
-            kind: "bone",
-            spin: 0,
-          });
-          floater(e.x, e.y - 80, "швыряет кость!", "#ff9d7a", 12);
+          e.spCd = raged ? 1.6 : 3.2;
+          const baseAng = Math.atan2(target.y - e.y - 30, target.x - e.x);
+          const n = raged ? 5 : 2;
+          const spread = raged ? 0.55 : 0.22;
+          for (let i = 0; i < n; i++) {
+            const off = n === 1 ? 0 : spread * (i / (n - 1) - 0.5) * 2;
+            const a = baseAng + off;
+            projectiles.push({
+              x: e.x,
+              y: e.y - 40,
+              vx: Math.cos(a) * 380,
+              vy: Math.sin(a) * 380,
+              dmg: 50,
+              life: 3.5,
+              kind: "bone",
+              spin: 0,
+              homing: true,
+              turnRate: 2.2,
+            });
+          }
+          floater(e.x, e.y - 80, "швыряет кости!", "#ff9d7a", 12);
         }
       }
 
@@ -3526,6 +3584,20 @@ function updateProjectiles(dt) {
     const p = projectiles[i];
     p.life -= dt;
     if (p.kind !== "arrow") p.spin += dt * 14; // стрела летит остриём вперёд
+    if (p.homing && running) {
+      // плавно доворачивает к игроку — уклонение требует манёвра, а не подхода к стене
+      const speed = Math.hypot(p.vx, p.vy) || 1;
+      const curAng = Math.atan2(p.vy, p.vx);
+      const wantAng = Math.atan2(player.y - p.y, player.x - p.x);
+      let diff = wantAng - curAng;
+      while (diff > Math.PI) diff -= 6.283;
+      while (diff < -Math.PI) diff += 6.283;
+      const maxTurn = p.turnRate * dt;
+      const turn = Math.max(-maxTurn, Math.min(maxTurn, diff));
+      const newAng = curAng + turn;
+      p.vx = Math.cos(newAng) * speed;
+      p.vy = Math.sin(newAng) * speed;
+    }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     if (p.kind === "fire") {
@@ -3891,9 +3963,29 @@ function draw() {
       ctx.drawImage(getChunk(cx, cy), cx * CHUNK * TILE, cy * CHUNK * TILE);
     }
 
-  // отравленные лужи — прямо на земле, под всеми
+  // отравленные лужи/трещины Калина — прямо на земле, под всеми
   for (const pl of pools) {
     const a = Math.min(0.55, (pl.t / pl.max) * 0.7);
+    if (pl.kind === "crack") {
+      ctx.fillStyle = "rgba(60,20,10," + a + ")";
+      ctx.beginPath();
+      ctx.ellipse(pl.x, pl.y, pl.r, pl.r * 0.45, 0, 0, 6.283);
+      ctx.fill();
+      ctx.fillStyle =
+        "rgba(255,110,50," + (a * 0.8 + Math.sin(gameTime * 9 + pl.x) * 0.1) + ")";
+      ctx.beginPath();
+      ctx.ellipse(
+        pl.x + Math.sin(gameTime * 3 + pl.x) * 2,
+        pl.y,
+        pl.r * 0.5,
+        pl.r * 0.2,
+        0,
+        0,
+        6.283,
+      );
+      ctx.fill();
+      continue;
+    }
     ctx.fillStyle = "rgba(94,66,28," + a + ")";
     ctx.beginPath();
     ctx.ellipse(pl.x, pl.y, pl.r, pl.r * 0.45, 0, 0, 6.283);

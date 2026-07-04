@@ -125,12 +125,15 @@ const AudioSys = (() => {
     alarmStart() {
       ensure();
       if (this._alarmId) return;
+      let beatN = 0;
       const beat = () => {
         if (muted || !ctx) return;
         tone('sawtooth', 98, 98, 0.42, 0.13);
         tone('sawtooth', 139, 139, 0.42, 0.1, 0.45); // тритон — тревога
         noiseHit(0.12, 150, 50, 0.28, 'lowpass');
         noiseHit(0.1, 150, 50, 0.2, 'lowpass', 1, 0.45);
+        if (beatN % 2 === 0) tone('sine', 55, 48, 0.55, 0.22); // зловещий бас-пульс через такт
+        beatN++;
       };
       beat();
       this._alarmId = setInterval(beat, 900);

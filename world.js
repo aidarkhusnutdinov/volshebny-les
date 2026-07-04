@@ -114,9 +114,9 @@ function generateWorld(seed) {
   }
 
   // --- замок Калина-царя ---
-  const CW = 15, CH = 11;
+  const CW = 21, CH = 15;
   (function placeCastle() {
-    let spot = pickSpot(52, 66, 9, 30) || pickSpot(40, 66, 8, 20) || { x: sx + 45, y: sy };
+    let spot = pickSpot(52, 66, 13, 30) || pickSpot(40, 66, 11, 20) || { x: sx + 45, y: sy };
     const cx = spot.x, cy = spot.y;
     const x0 = cx - (CW >> 1), y0 = cy - (CH >> 1);
     for (let y = y0 - 1; y <= y0 + CH; y++) for (let x = x0 - 1; x <= x0 + CW; x++)
@@ -124,15 +124,17 @@ function generateWorld(seed) {
     for (let x = x0; x < x0 + CW; x++) { terrain[idx(x, y0)] = T.WALL; terrain[idx(x, y0 + CH - 1)] = T.WALL; }
     for (let y = y0; y < y0 + CH; y++) { terrain[idx(x0, y)] = T.WALL; terrain[idx(x0 + CW - 1, y)] = T.WALL; }
     const gx = x0 + (CW >> 1);
-    terrain[idx(gx, y0 + CH - 1)] = T.STONE; terrain[idx(gx - 1, y0 + CH - 1)] = T.STONE; terrain[idx(gx + 1, y0 + CH - 1)] = T.STONE;
+    // ворота шире — приручённым зверям, идущим следом, есть куда протиснуться
+    for (let d = -2; d <= 2; d++) terrain[idx(gx + d, y0 + CH - 1)] = T.STONE;
     const gy = y0 + CH - 1;
     world.castle = {
       x0, y0, w: CW, h: CH, gate: { x: gx, y: gy },
-      // пиксельная зона ворот — пока закрыты, через неё нельзя пройти
-      gatePx: { x0: (gx - 1) * TILE, x1: (gx + 2) * TILE, y0: gy * TILE, y1: (gy + 1) * TILE },
+      // пиксельная зона ворот — пока закрыты (или заперты Калином), через неё нельзя пройти
+      gatePx: { x0: (gx - 2) * TILE, x1: (gx + 3) * TILE, y0: gy * TILE, y1: (gy + 1) * TILE },
       cx: (x0 + CW / 2) * TILE, cy: (y0 + CH / 2 - 1) * TILE,
     };
     world.gateOpen = false; // откроются, когда все воеводы повержены
+    world.kalinLockdown = false; // запираются заново, когда герой входит к Калину живому
     carvePath(gx, y0 + CH + 1);
   })();
 
@@ -210,8 +212,9 @@ function generateWorld(seed) {
   world.passable = (px, py) => {
     const t = tileAt(Math.floor(px / TILE), Math.floor(py / TILE));
     if (t === T.WATER || t === T.RAVINE || t === T.WALL) return false;
-    // закрытые ворота замка — как стена, пока не повержены все воеводы
-    if (!world.gateOpen && world.castle) {
+    // закрытые ворота замка — как стена, пока не повержены все воеводы,
+    // либо заперты заново, пока герой бьётся с живым Калином внутри
+    if ((!world.gateOpen || world.kalinLockdown) && world.castle) {
       const g = world.castle.gatePx;
       if (px >= g.x0 && px < g.x1 && py >= g.y0 && py < g.y1) return false;
     }
