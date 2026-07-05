@@ -57,11 +57,13 @@ const L2_WILD = {
 };
 
 const L2_BOSSES = {
-  shurale: { name: 'Шурале', hp: 430, dmg: 16, speed: 115, weapon: null, xp: 300 },
-  lono: { name: 'Лоно', hp: 380, dmg: 12, speed: 80, weapon: null, xp: 300 },
-  noga: { name: 'БОСАЯ НОГА', hp: 560, dmg: 22, speed: 90, weapon: null, xp: 300 },
-  velikan: { name: 'Великан', hp: 520, dmg: 20, speed: 85, weapon: null, xp: 300 },
-  yama: { name: 'ЯМА', hp: 850, dmg: 0, speed: 0, weapon: null, xp: 900 },
+  // живучесть — среднее между первой (слишком злой) и урезанной (слишком лёгкой) версиями;
+  // урон оставлен урезанным, зато звери ранят боссов вполсилы (см. hurtEnemy)
+  shurale: { name: 'Шурале', hp: 490, dmg: 16, speed: 115, weapon: null, xp: 300 },
+  lono: { name: 'Лоно', hp: 430, dmg: 12, speed: 80, weapon: null, xp: 300 },
+  noga: { name: 'БОСАЯ НОГА', hp: 630, dmg: 22, speed: 90, weapon: null, xp: 300 },
+  velikan: { name: 'Великан', hp: 585, dmg: 20, speed: 85, weapon: null, xp: 300 },
+  yama: { name: 'ЯМА', hp: 925, dmg: 0, speed: 0, weapon: null, xp: 900 },
 };
 
 Object.assign(ENCOUNTER, {
@@ -75,7 +77,7 @@ Object.assign(ENCOUNTER, {
   croc: 'выполз из чёрной реки, пасть — капкан',
   vodyanoy: 'хозяин омута, тиной пахнет беда',
   lesnoy: 'лихой человек — переманивает твоих зверей!',
-  shurale: 'лесной демон — защекочет до смерти',
+  shurale: 'лесной дух — защекочет до смерти',
   lono: 'розовая погибель на ножках, воет убийственно',
   noga: 'босая нога размером с дом — растопчет',
   velikan: 'исполин, чьё зловоние валит с ног',
@@ -196,6 +198,39 @@ function generateWorld2(seed) {
     world.buildings.push(b);
     world.props.push({ type: 'campfire', x: (x + 1.6) * TILE, y: (y + 1.2) * TILE });
     world.huts.push({ npcType, x: (x + 0.5) * TILE, y: (y + 0.8) * TILE });
+  }
+
+  // --- гарантия проходимости: недостижимых карманов суши быть не должно ---
+  // Волна от спавна по проходимым тайлам; зона плевка ЯМЫ считается преградой,
+  // чтобы за ней не пряталось «мешков», куда героя можно зашвырнуть без выхода.
+  // Всё, куда волна не дошла, обрушиваем в овраг или заливаем водой.
+  {
+    const pitBlockR = world.pit.r + 90;
+    const blockedT = (x, y) => {
+      const t = tileAt(x, y);
+      if (t === T.WATER || t === T.RAVINE) return true;
+      return Math.hypot((x + 0.5) * TILE - world.pit.x, (y + 0.5) * TILE - world.pit.y) < pitBlockR;
+    };
+    const seen = new Uint8Array(MAP_W * MAP_H);
+    const queue = [idx(sx, sy)];
+    seen[queue[0]] = 1;
+    while (queue.length) {
+      const c = queue.pop(), cx = c % MAP_W, cy = (c / MAP_W) | 0;
+      for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+        if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
+        const n = idx(nx, ny);
+        if (seen[n] || blockedT(nx, ny)) continue;
+        seen[n] = 1;
+        queue.push(n);
+      }
+    }
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (seen[idx(x, y)] || blockedT(x, y)) continue;
+      let waterN = 0;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]])
+        if (tileAt(nx, ny) === T.WATER) waterN++;
+      terrain[idx(x, y)] = waterN ? T.WATER : T.RAVINE;
+    }
   }
 
   // --- деревья: тёмные ели да кривые дубы, гуще обычного ---
@@ -719,10 +754,13 @@ const L2AI = {
         if (Math.random() < 0.5) {
           best.tamed = false;
           best.tameBonus = 0;
-          best.scared = 3;
+          // переметнулся насовсем: обратно не приручить и отныне дерётся против героя
+          best.grudge = true;
+          best.feral = true;
+          best.angry = 6;
           const i = player.pets.indexOf(best);
           if (i >= 0) player.pets.splice(i, 1);
-          announce('Разбойник свистнул — ' + best.name + ' ушёл к лихим людям!', '#ff8a7a');
+          announce('Разбойник свистнул — ' + best.name + ' ушёл к лихим людям и теперь дерётся против тебя!', '#ff8a7a');
           AudioSys.whistle();
         } else {
           floater(best.x, best.y - 50, best.name + ' не поддался!', '#9fd08a', 12);
@@ -1017,22 +1055,35 @@ function l2Update(dt) {
     }
   }
 
-  // ЯМА отплёвывает тех, кто топчется у края
+  // ЯМА отплёвывает тех, кто топчется у края — назад, откуда герой пришёл:
+  // та дорога точно проходима, героя не зашвырнёт в западню
   if (yamaRef && !yamaRef.dead) {
     const d = Math.hypot(player.x - yamaRef.x, player.y - yamaRef.y);
     if (d < yamaRef.r + 75) {
       player.pitT = (player.pitT || 0) + dt;
       if (player.pitT > 1.4) {
         player.pitT = 0;
-        const dd = d || 1;
+        let ax = (player.pitFromX ?? player.x) - player.x;
+        let ay = (player.pitFromY ?? player.y) - player.y;
+        let al = Math.hypot(ax, ay);
+        if (al < 8) {
+          // не знаем, откуда пришёл — плюём хотя бы от центра
+          ax = player.x - yamaRef.x; ay = player.y - yamaRef.y;
+          al = Math.hypot(ax, ay) || 1;
+        }
         for (let s = 0; s < 10; s++)
-          tryMove(player, ((player.x - yamaRef.x) / dd) * 24, ((player.y - yamaRef.y) / dd) * 24);
+          tryMove(player, (ax / al) * 24, (ay / al) * 24);
         hurtPlayer(8, yamaRef.x, yamaRef.y);
         AudioSys.stomp();
         shake = 8;
         toast('ЯМА ОТПЛЮНУЛА ТЕБЯ!', '#8fd06a');
       }
-    } else player.pitT = 0;
+    } else {
+      player.pitT = 0;
+      // пока герой вне зоны плевка, помним его последнее «безопасное» место
+      player.pitFromX = player.x;
+      player.pitFromY = player.y;
+    }
   }
 }
 
@@ -1696,7 +1747,7 @@ const L2DRAW = {
     ctx.restore();
   },
   shurale(e, o, t) {
-    // лесной демон: рог, груди до пола, сверхдлинные пальцы
+    // лесной дух: рог, груди до пола, сверхдлинные пальцы
     humanoid(ctx, t, {
       ...o,
       s: 1.3,

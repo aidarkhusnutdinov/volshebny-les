@@ -172,6 +172,37 @@ function generateWorld(seed) {
     world.villages.push(village);
   }
 
+  // --- гарантия проходимости: недостижимых карманов суши быть не должно ---
+  // (отброшенный свистом или ЯМОЙ герой не должен попадать в западню без выхода)
+  // Волна от спавна по проходимым тайлам; внутрь замка она заходит через проём ворот.
+  // Всё, куда волна не дошла, обрушиваем в овраг или заливаем водой.
+  {
+    const blockedT = (x, y) => {
+      const t = tileAt(x, y);
+      return t === T.WATER || t === T.RAVINE || t === T.WALL;
+    };
+    const seen = new Uint8Array(MAP_W * MAP_H);
+    const queue = [idx(sx, sy)];
+    seen[queue[0]] = 1;
+    while (queue.length) {
+      const c = queue.pop(), cx = c % MAP_W, cy = (c / MAP_W) | 0;
+      for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+        if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H) continue;
+        const n = idx(nx, ny);
+        if (seen[n] || blockedT(nx, ny)) continue;
+        seen[n] = 1;
+        queue.push(n);
+      }
+    }
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (seen[idx(x, y)] || blockedT(x, y)) continue;
+      let waterN = 0;
+      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]])
+        if (tileAt(nx, ny) === T.WATER) waterN++;
+      terrain[idx(x, y)] = waterN ? T.WATER : T.RAVINE;
+    }
+  }
+
   // --- деревья (после дорог, чтобы дороги были чистые) ---
   for (let y = 1; y < MAP_H - 1; y++) for (let x = 1; x < MAP_W - 1; x++) {
     const t = terrain[idx(x, y)];

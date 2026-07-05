@@ -924,6 +924,18 @@ function hurtEnemy(e, dmg, fromPet) {
     AudioSys.hitMetal();
     return;
   }
+  if (fromPet && e.isBoss) {
+    // у хозяев леса и воевод шкура толстая: зубы и когти зверей ранят их вполсилы —
+    // толпа соратников не должна разбирать босса без героя
+    dmg *= 0.55;
+    if (!hintsShown.bossthick)
+      hintOnce(
+        "bossthick",
+        "У боссов толстая шкура — звери ранят их вполсилы. Добивай сам!",
+        "",
+        "#cbb87f",
+      );
+  }
   e.hp -= dmg;
   e.hurtT = 0.18;
   floater(
@@ -1811,17 +1823,37 @@ function animalMenu(a, cx, cy) {
         { label: "🤚 Погладить", fn: () => petAnimal(a) },
         { label: "👋 Отпустить на волю", fn: () => releaseAnimal(a) },
       ]
-    : [
-        { label: "🤚 Погладить", fn: () => petAnimal(a) },
-        { label: "🐾 Приручить", fn: () => tameAnimal(a) },
-        {
-          label: "❗ Прогнать",
-          fn: () => {
-            a.scared = 3;
-            addLog(a.name + " удирает прочь.", "#cbb87f");
+    : a.grudge
+      ? [
+          // битый или переметнувшийся зверь: ни ласки, ни приручения — только гнать
+          {
+            label: "👁 Осмотреть",
+            fn: () =>
+              addLog(
+                a.name +
+                  " смотрит волком: он помнит обиду и никогда не подойдёт.",
+                "#ff9d7a",
+              ),
           },
-        },
-      ];
+          {
+            label: "❗ Прогнать",
+            fn: () => {
+              a.scared = 3;
+              addLog(a.name + " удирает прочь.", "#cbb87f");
+            },
+          },
+        ]
+      : [
+          { label: "🤚 Погладить", fn: () => petAnimal(a) },
+          { label: "🐾 Приручить", fn: () => tameAnimal(a) },
+          {
+            label: "❗ Прогнать",
+            fn: () => {
+              a.scared = 3;
+              addLog(a.name + " удирает прочь.", "#cbb87f");
+            },
+          },
+        ];
   openMenu(cx, cy, a.name + (a.tamed ? " (соратник)" : ""), opts, a);
 }
 
@@ -2367,7 +2399,12 @@ function propMenu(p, cx, cy) {
         {
           label: "⚒ Ковать оружие (бревно)",
           fn: () => {
-            // ковать можно сколько угодно, но металл должен остыть — 30 секунд между закалками
+            // закалок всего три — дальше металл только хрупнет; и между ними остывание 30 с
+            if ((player.forged || 0) >= 3)
+              return addLog(
+                "Клинок прокован трижды — прочнее его уже не сделать.",
+                "#cbb87f",
+              );
             if (gameTime < (player.forgeReadyAt || 0))
               return addLog(
                 "Металл ещё не остыл — жди ещё " +
@@ -2388,9 +2425,9 @@ function propMenu(p, cx, cy) {
             setTimeout(() => AudioSys.hitMetal(), 440);
             burst(p.x, p.y - 20, "#ffd76e", 14, 120);
             announce(
-              "⚒ Оружие проковано на углях! Урон +25% (закалка ×" +
+              "⚒ Оружие проковано на углях! Урон +25% (закалка " +
                 player.forged +
-                ").",
+                " из 3).",
               "#ffd76e",
             );
           },
@@ -2592,10 +2629,11 @@ function useItem(id) {
     }
     case "bouquet": {
       // подарить букет ближайшему неприручённому зверю — доверие сильно растёт
+      // (обиженному дарить без толку — он букет не примет)
       let best = null,
         bd = 110;
       for (const a of animals) {
-        if (a.hp <= 0 || a.tamed) continue;
+        if (a.hp <= 0 || a.tamed || a.grudge) continue;
         const d = Math.hypot(a.x - player.x, a.y - player.y);
         if (d < bd) {
           bd = d;
@@ -2638,6 +2676,16 @@ function tameChance(a) {
   );
 }
 function petAnimal(a) {
+  if (!a.tamed && a.grudge) {
+    // битый зверь ласку не примет — обида на всю жизнь
+    a.scared = 2;
+    AudioSys.tameFail();
+    addLog(
+      a.name + " помнит твой удар и шарахается прочь. Такого уже не задобрить.",
+      "#ff9d7a",
+    );
+    return;
+  }
   if (!a.tamed) {
     // зверь — не игрушка: может шарахнуться, а хищник — и цапнуть
     const r = Math.random();
@@ -2704,6 +2752,15 @@ function petAnimal(a) {
   gainXP(2);
 }
 function tameAnimal(a) {
+  if (a.grudge) {
+    a.scared = 2;
+    AudioSys.tameFail();
+    addLog(
+      a.name + " смотрит волком: битый зверь не приручается. Никогда.",
+      "#ff9d7a",
+    );
+    return;
+  }
   const chance = tameChance(a);
   if (PREDATORS[a.sp] && Math.random() < 0.12) {
     hurtPlayer(a.dmg * 0.6, a.x, a.y);
@@ -2741,17 +2798,20 @@ function releaseAnimal(a) {
   addLog(a.name + " уходит на волю. Прощай, друг.", "#cbb87f");
 }
 
-// удар героя по зверю: соратник уходит, хищник мстит, добыча — припасы
+// удар героя по зверю: соратник уходит, хищник мстит, добыча — припасы.
+// Битый зверь запоминает обиду навсегда (grudge) — его уже не погладить и не приручить
 function hurtAnimal(a, dmg) {
   a.hp -= dmg;
+  a.grudge = true;
   burst(a.x, a.y - 12, "#c23b30", 5, 70);
   AudioSys.hitFlesh();
   floater(a.x, a.y - 50 * (a.s || 1), "-" + Math.round(dmg), "#fff", 13);
   if (a.tamed) {
-    // ударил друга — он уходит, не оборачиваясь
+    // ударил друга — он уходит с карты, не оборачиваясь, и больше не вернётся
     a.tamed = false;
+    if (player.mount === a) player.mount = null;
     player.pets = player.pets.filter((x) => x !== a);
-    a.scared = 4;
+    a.leaving = 10;
     announce(a.name + " не ждал удара от друга... Ушёл навсегда.", "#ff8a7a");
   }
   if (a.hp <= 0) {
@@ -2937,10 +2997,12 @@ function interact() {
     if (Math.hypot(wn.x - player.x, wn.y - player.y) < 90)
       return wandererMenu(wn, wn.x - camX, wn.y - 30 - camY);
   // E рядом со зверем: пока доверие мало — гладит, как доверие накопится — приручает
+  // (битых и переметнувшихся зверей E не трогает — им хода назад нет)
   for (const a of animals)
     if (
       a.hp > 0 &&
       !a.tamed &&
+      !a.grudge &&
       !(a.angry > 0) &&
       Math.hypot(a.x - player.x, a.y - player.y) < 60 * (a.s || 1)
     ) {
@@ -3150,11 +3212,11 @@ function update(dt) {
     }
   }
   player.weakT = Math.max(0, player.weakT - dt);
-  // раны затягиваются сами, когда бой стих (6 с без ударов) —
-  // не нужно уныло бродить и выискивать ягоды после каждой сшибки
+  // раны затягиваются сами, когда бой стих (6 с без ударов), но неспешно —
+  // еда и родники по-прежнему главные лекари
   player.sinceHurt = (player.sinceHurt || 0) + dt;
   if (player.sinceHurt > 6 && player.hp > 0 && player.hp < player.maxHp) {
-    player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt);
+    player.hp = Math.min(player.maxHp, player.hp + 1.4 * dt);
     if (Math.random() < dt * 0.8)
       burst(player.x, player.y - 24, "#8fd06a", 1, 22, -60, 0.5);
     if (!hintsShown.regen)
@@ -4020,6 +4082,28 @@ function updateAnimals(dt) {
       a.hp = Math.min(a.maxHp, a.hp + 1.5 * dt); // в седле зверь дух переводит
       continue;
     }
+    if (a.leaving) {
+      // обиженный ударом друг уходит с карты насовсем
+      a.leaving -= dt;
+      const d = Math.hypot(a.x - player.x, a.y - player.y) || 1;
+      a.walk = true;
+      tryMove(
+        a,
+        ((a.x - player.x) / d) * a.speed * 1.35 * dt,
+        ((a.y - player.y) / d) * a.speed * 1.35 * dt,
+      );
+      a.face = a.x - player.x > 0 ? 1 : -1;
+      if (a.leaving <= 0 || d > 850) animals.splice(i, 1);
+      continue;
+    }
+    // переметнувшийся к лихим людям зверь враждебен до конца: завидел героя — нападает
+    if (
+      !a.tamed &&
+      a.feral &&
+      !(a.angry > 0) &&
+      Math.hypot(player.x - a.x, player.y - a.y) < 480
+    )
+      a.angry = 5;
     if (a.tamed) {
       // соратник: атакует врагов рядом, иначе идёт за героем
       let target = null,
