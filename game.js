@@ -422,6 +422,24 @@ function addLog(msg, color) {
   logLine(msg, color);
   toast(msg, color); // обычное событие дублируется тостом внизу по центру
 }
+// обучающая подсказка (какая клавиша что делает) показывается один раз навсегда,
+// дальше — короткое подтверждение без обучалки
+const hintsShown = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("bogatyrHints") || "{}");
+  } catch (e) {
+    return {};
+  }
+})();
+function hintOnce(id, fullMsg, shortMsg, color) {
+  if (!hintsShown[id]) {
+    hintsShown[id] = 1;
+    try {
+      localStorage.setItem("bogatyrHints", JSON.stringify(hintsShown));
+    } catch (e) {}
+    addLog(fullMsg, color);
+  } else addLog(shortMsg, color);
+}
 // ВАЖНОЕ событие — крупно вверху экрана (освобождение, боссы, реплики, первая встреча)
 function announce(msg, color) {
   logLine(msg, color);
@@ -1228,7 +1246,12 @@ function smashProp(p) {
     case "bush":
       if (!p.used) {
         player.items.berries++;
-        addLog("Куст в щепки, ягоды — в котомку (клавиша 1).", "#8fd06a");
+        hintOnce(
+          "berries",
+          "Куст в щепки, ягоды — в котомку (клавиша 1 — съесть, +12).",
+          "Куст в щепки, ягоды — в котомку.",
+          "#8fd06a",
+        );
       } else addLog("Разметал куст.");
       break;
     case "mushroom":
@@ -1265,8 +1288,10 @@ function smashProp(p) {
       if (!p.used) {
         player.items.honey++;
         hurtPlayer(6);
-        addLog(
+        hintOnce(
+          "honey",
           "Улей вдребезги! Мёд твой (клавиша 4), но пчёлы искусали (-6).",
+          "Улей вдребезги! Мёд твой, но пчёлы искусали (-6).",
           "#ff9d7a",
         );
       } else addLog("Пустой улей разлетелся.");
@@ -1438,7 +1463,7 @@ function customWord(word, target, title) {
   }
 }
 
-function tryContext(clientX, clientY) {
+function tryContext(clientX, clientY, skipMount) {
   const wx = clientX + camX,
     wy = clientY + camY;
   const near = (o, r) => Math.hypot(o.x - wx, o.y - wy) < r;
@@ -1462,6 +1487,8 @@ function tryContext(clientX, clientY) {
     }
   for (const a of animals)
     if (a.hp > 0) {
+      // при вызове через E скакун под седлом не перехватывает гриб/родник под копытами
+      if (skipMount && a === player.mount) continue;
       const as = a.s || 1;
       // радиус клика растёт с размером зверя, центр поднят к туловищу (баг с лосем)
       const d = Math.min(
@@ -1594,8 +1621,10 @@ function tryContext(clientX, clientY) {
                 b.gaveMeat = true;
                 player.items.meat++;
                 AudioSys.pickup();
-                addLog(
+                hintOnce(
+                  "meat",
                   "Собрали узелок вяленого мяса (клавиша 6 — жарить у костра).",
+                  "Собрали узелок вяленого мяса.",
                   "#8fd06a",
                 );
               } else addLog("«Всё отдали, батюшка, не обессудь».");
@@ -1628,7 +1657,12 @@ function tryContext(clientX, clientY) {
             if (Math.random() < 0.5 + player.smek * 0.02) {
               player.items.fish++;
               AudioSys.pickup();
-              addLog("Поймал щуку! В котомку (клавиша 3 — съесть).", "#8fd06a");
+              hintOnce(
+                "fish",
+                "Поймал щуку! В котомку (клавиша 3 — съесть).",
+                "Поймал щуку! В котомку.",
+                "#8fd06a",
+              );
             } else addLog("Сорвалась, зараза...", "#cbb87f");
           },
         },
@@ -1956,8 +1990,10 @@ function propMenu(p, cx, cy) {
               p.used = true;
               player.items.berries++;
               AudioSys.pickup();
-              addLog(
+              hintOnce(
+                "berries",
                 "Земляника — в котомку (клавиша 1 — съесть, +12).",
+                "Земляника — в котомку.",
                 "#8fd06a",
               );
             } else addLog("Ягод больше нет.");
@@ -1980,8 +2016,10 @@ function propMenu(p, cx, cy) {
               p.used = true;
               player.items.kljukva++;
               AudioSys.pickup();
-              addLog(
+              hintOnce(
+                "kljukva",
                 "Клюква болотная — в котомку (клавиша 7 — съесть, +14).",
+                "Клюква — в котомку.",
                 "#8fd06a",
               );
             } else addLog("Кочка обобрана дочиста.");
@@ -1999,8 +2037,10 @@ function propMenu(p, cx, cy) {
               p.used = true;
               player.items.gnilushka++;
               AudioSys.pickup();
-              addLog(
+              hintOnce(
+                "gnilushka",
                 "Светящаяся гнилушка — в котомку (клавиша 8 — вспышка, пугает нечисть).",
+                "Гнилушка — в котомку.",
                 "#8cf0aa",
               );
             } else addLog("Пень давно потух.");
@@ -2074,8 +2114,10 @@ function propMenu(p, cx, cy) {
             p.used = true;
             player.items.mushroom++;
             AudioSys.pickup();
-            addLog(
+            hintOnce(
+              "mushroom",
               "Гриб в котомке (клавиша 2). Боровик или мухомор — как повезёт.",
+              "Гриб в котомке.",
               "#cbb87f",
             );
           },
@@ -2107,8 +2149,10 @@ function propMenu(p, cx, cy) {
             world.props.splice(world.props.indexOf(p), 1);
             player.items.bouquet++;
             AudioSys.pickup();
-            addLog(
+            hintOnce(
+              "bouquet",
               "Букет за пояс (клавиша 5 — подарить зверю, доверие вырастет).",
+              "Букет за пояс.",
               "#e8a0b4",
             );
             gainXP(2);
@@ -2161,13 +2205,17 @@ function propMenu(p, cx, cy) {
             p.used = true;
             if (Math.random() < Math.max(0.05, 0.3 - player.smek * 0.02)) {
               hurtPlayer(6);
-              addLog(
+              hintOnce(
+                "honey",
                 "Пчёлы искусали (-6)! Но мёд добыт — в котомку (клавиша 4).",
+                "Пчёлы искусали (-6)! Но мёд добыт — в котомку.",
                 "#ff9d7a",
               );
             } else {
-              addLog(
+              hintOnce(
+                "honey",
                 "Ловко выкурил пчёл! Дикий мёд в котомке (клавиша 4, +30).",
+                "Ловко выкурил пчёл! Дикий мёд в котомке.",
                 "#ffd76e",
               );
             }
@@ -2771,7 +2819,12 @@ function interact() {
         groundItems.splice(i, 1);
         player.items.meat++;
         AudioSys.pickup();
-        addLog("Припасы в котомке (клавиша 6 — жарить у костра).", "#8fd06a");
+        hintOnce(
+          "meat",
+          "Припасы в котомке (клавиша 6 — жарить у костра).",
+          "Припасы в котомке.",
+          "#8fd06a",
+        );
         return;
       }
       const old = player.weapon;
@@ -2802,10 +2855,20 @@ function interact() {
     AudioSys.pickup();
     if (p.type === "bush") {
       player.items.berries++;
-      addLog("Земляника — в котомку (клавиша 1 — съесть, +12).", "#8fd06a");
+      hintOnce(
+        "berries",
+        "Земляника — в котомку (клавиша 1 — съесть, +12).",
+        "Земляника — в котомку.",
+        "#8fd06a",
+      );
     } else {
       player.items.kljukva++;
-      addLog("Клюква — в котомку (клавиша 7 — съесть, +14).", "#8fd06a");
+      hintOnce(
+        "kljukva",
+        "Клюква — в котомку (клавиша 7 — съесть, +14).",
+        "Клюква — в котомку.",
+        "#8fd06a",
+      );
     }
     return;
   }
@@ -2850,7 +2913,7 @@ function interact() {
       best = a; // скакун под седлом меню не перехватывает
   if (best) {
     // открываем то же меню, что и ПКМ по объекту
-    tryContext(best.x - camX, best.y - 10 - camY);
+    tryContext(best.x - camX, best.y - 10 - camY, true);
   } else if (player.mount) {
     // E в чистом поле верхом — спешиться
     const m = player.mount;
