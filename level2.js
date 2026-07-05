@@ -295,6 +295,7 @@ function newGame2() {
   enemies = []; animals = []; hostages = []; wanderers = [];
   groundItems = []; projectiles = []; particles = []; floaters = [];
   pools = []; l2Waves = []; l2Falls = []; l2EventT = 16; l2Eyes = []; l2Wisps = [];
+  l2Lights = []; l2Double = null; l2DoubleT = 50; l2BellT = 14; l2LightT = 8;
   chunkCache = new Map();
   gameOver = false; victory = false; kalinDead = true;
   freedHostages = 0; totalHostages = 0;
@@ -506,7 +507,7 @@ const L2AI = {
       e.groanT = 4 + Math.random() * 5 + (1 - near) * 5;
       AudioSys.yamaVoice(0.2 + near * 0.8);
       if (pd < 500)
-        floater(e.x, e.y - 30, 'из ямы доносятся стоны...', '#c9a0e8', 12);
+        toastMinor('Из ямы доносятся стоны и шёпот...', '#c9a0e8');
     }
     // изрыгает нечисть: спящая — изредка, пробуждённая — постоянно
     e.spawnT -= dt;
@@ -774,7 +775,13 @@ let l2EventT = 16,
   l2Falls = [],
   l2Eyes = [], // пары глаз, мигающие в чаще
   l2EyeT = 4,
-  l2Wisps = []; // ползучий туман
+  l2Wisps = [], // клочья тумана — локальными банками
+  l2WispT = 0,
+  l2Lights = [], // блуждающие болотные огоньки — заманивают в топь
+  l2LightT = 8,
+  l2Double = null, // двойник героя в тумане
+  l2DoubleT = 50,
+  l2BellT = 14; // колокол из-под земли у ЯМЫ
 
 function l2Quake() {
   announce('Земля дрожит и РАЗВЕРЗАЕТСЯ под ногами!', '#ff6a4a');
@@ -805,7 +812,7 @@ function l2Quake() {
 }
 
 function l2SkyFall() {
-  toast('С чёрного неба что-то падает!', '#c9a0e8');
+  toastMinor('С чёрного неба что-то падает...', '#c9a0e8');
   AudioSys.wind();
   const n = 4 + Math.floor(Math.random() * 4);
   for (let i = 0; i < n; i++) {
@@ -840,20 +847,104 @@ function l2Update(dt) {
     }
   }
 
-  // туман ползёт лентами
-  while (l2Wisps.length < 5) {
-    l2Wisps.push({
-      x: player.x + (Math.random() - 0.5) * 1000,
-      y: player.y + (Math.random() - 0.5) * 700,
-      w: 120 + Math.random() * 160,
-      vx: 6 + Math.random() * 8,
-      ph: Math.random() * 6.283,
-    });
+  // туман держится банками над топями да у могил — не размазан по всему лесу
+  l2WispT -= dt;
+  if (l2WispT <= 0 && l2Wisps.length < 3) {
+    l2WispT = 3;
+    for (let tries = 0; tries < 30; tries++) {
+      const ang = Math.random() * 6.283, d = 250 + Math.random() * 550;
+      const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
+      const t = world.tileAt(Math.floor(x / TILE), Math.floor(y / TILE));
+      if (t !== T.SWAMP && !(t === T.FOREST && Math.random() < 0.25)) continue;
+      l2Wisps.push({
+        x, y,
+        r: 150 + Math.random() * 130,
+        vx: (Math.random() - 0.5) * 9,
+        vy: (Math.random() - 0.5) * 4,
+        ph: Math.random() * 6.283,
+        life: 0, // плавно проявляется и тает
+        maxLife: 18 + Math.random() * 14,
+      });
+      break;
+    }
   }
   for (let i = l2Wisps.length - 1; i >= 0; i--) {
     const ws = l2Wisps[i];
+    ws.life += dt;
     ws.x += ws.vx * dt;
-    if (Math.hypot(ws.x - player.x, ws.y - player.y) > 900) l2Wisps.splice(i, 1);
+    ws.y += ws.vy * dt;
+    if (ws.life > ws.maxLife || Math.hypot(ws.x - player.x, ws.y - player.y) > 1100)
+      l2Wisps.splice(i, 1);
+  }
+
+  // блуждающие огоньки: манят вглубь топи и тают со смехом, если догнать
+  l2LightT -= dt;
+  if (l2LightT <= 0 && l2Lights.length < 2) {
+    l2LightT = 9 + Math.random() * 10;
+    for (let tries = 0; tries < 30; tries++) {
+      const ang = Math.random() * 6.283, d = 220 + Math.random() * 320;
+      const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
+      if (world.tileAt(Math.floor(x / TILE), Math.floor(y / TILE)) !== T.SWAMP) continue;
+      l2Lights.push({ x, y, ph: Math.random() * 6.283, t: 0 });
+      break;
+    }
+  }
+  for (let i = l2Lights.length - 1; i >= 0; i--) {
+    const lt = l2Lights[i];
+    lt.t += dt;
+    const pd2 = Math.hypot(player.x - lt.x, player.y - lt.y);
+    if (pd2 < 300) {
+      // отплывает от героя — заманивает глубже в трясину
+      const ax = (lt.x - player.x) / (pd2 || 1), ay = (lt.y - player.y) / (pd2 || 1);
+      const nx = lt.x + ax * 34 * dt, ny = lt.y + ay * 34 * dt;
+      if (world.tileAt(Math.floor(nx / TILE), Math.floor(ny / TILE)) === T.SWAMP) {
+        lt.x = nx; lt.y = ny;
+      }
+    }
+    lt.x += Math.sin(gameTime * 0.8 + lt.ph) * 12 * dt;
+    lt.y += Math.cos(gameTime * 0.6 + lt.ph) * 8 * dt;
+    if (pd2 < 46) {
+      toastMinor('Огонёк растаял... а вокруг — трясина. И будто смех вдали.', '#8ac9d6');
+      AudioSys.evilLaugh();
+      l2Lights.splice(i, 1);
+    } else if (lt.t > 40 || pd2 > 800) l2Lights.splice(i, 1);
+  }
+
+  // двойник героя мерещится в тумане
+  l2DoubleT -= dt;
+  if (l2DoubleT <= 0 && !l2Double) {
+    l2DoubleT = 70 + Math.random() * 60;
+    const ang = Math.random() * 6.283;
+    const x = player.x + Math.cos(ang) * 420, y = player.y + Math.sin(ang) * 420;
+    if (world.passable(x, y)) {
+      l2Double = { x, y, t: 12 };
+      toastMinor('Кто-то стоит меж деревьев. Кто-то очень знакомый...', '#c9a0e8');
+    }
+  }
+  if (l2Double) {
+    l2Double.t -= dt;
+    l2Double.face = player.x > l2Double.x ? 1 : -1; // всегда смотрит на тебя
+    const dd = Math.hypot(player.x - l2Double.x, player.y - l2Double.y);
+    if (dd < 170 || l2Double.t <= 0) {
+      if (dd < 170) {
+        toastMinor('Двойник растаял в тумане. По спине — холод.', '#c9a0e8');
+        AudioSys.whisper();
+        player.feared = Math.max(player.feared, 0.7);
+      }
+      burst(l2Double.x, l2Double.y - 30, '#3d3050', 10, 50, 20, 0.8);
+      l2Double = null;
+    }
+  }
+
+  // колокол бьёт из-под земли — чем ближе ЯМА, тем слышнее
+  if (yamaRef && !yamaRef.dead) {
+    l2BellT -= dt;
+    const pdPit = Math.hypot(player.x - yamaRef.x, player.y - yamaRef.y);
+    if (l2BellT <= 0 && pdPit < 850) {
+      l2BellT = 11 + Math.random() * 9;
+      AudioSys.bellUnder(0.25 + (1 - pdPit / 850) * 0.75);
+      if (pdPit < 400) toastMinor('Из-под земли бьёт колокол. Кто звонит?..', '#c9a0e8');
+    }
   }
 
   // редкие внезапные ужасы — лес живёт своей злой жизнью
@@ -873,7 +964,7 @@ function l2Update(dt) {
     l2Falls.splice(i, 1);
     if (f.kind === 'crow') {
       burst(f.x, f.y, '#1c1620', 10, 80);
-      addLog('Мёртвый ворон шмякнулся оземь.', '#c9a0e8');
+      toastMinor('Мёртвый ворон шмякнулся оземь.', '#c9a0e8');
     } else {
       burst(f.x, f.y, '#8d8d85', 12, 110);
       AudioSys.stomp();
@@ -939,21 +1030,73 @@ function l2Update(dt) {
 function l2DrawOverlay() {
   for (const ws of l2Wisps) {
     const sx2 = ws.x - camX, sy2 = ws.y - camY;
-    if (sx2 < -300 || sx2 > VW + 300 || sy2 < -200 || sy2 > VH + 200) continue;
-    const breathe = Math.sin(gameTime * 0.5 + ws.ph) * 0.02;
-    ctx.fillStyle = 'rgba(150,160,190,' + (0.055 + breathe) + ')';
-    ctx.beginPath();
-    ctx.ellipse(sx2, sy2 + Math.sin(gameTime * 0.4 + ws.ph) * 12, ws.w, ws.w * 0.22, 0, 0, 6.283);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(170,180,210,' + (0.04 + breathe) + ')';
-    ctx.beginPath();
-    ctx.ellipse(sx2 + ws.w * 0.3, sy2 - 10, ws.w * 0.5, ws.w * 0.13, 0, 0, 6.283);
-    ctx.fill();
+    if (sx2 < -400 || sx2 > VW + 400 || sy2 < -300 || sy2 > VH + 300) continue;
+    // плавно проявляется, живёт, тает
+    const fade = Math.min(1, ws.life / 5, Math.max(0, (ws.maxLife - ws.life) / 5));
+    const breathe = 1 + Math.sin(gameTime * 0.45 + ws.ph) * 0.08;
+    // три перекрывающихся мягких радиальных пятна — банка тумана
+    for (let k = 0; k < 3; k++) {
+      const ox = Math.sin(gameTime * 0.3 + ws.ph + k * 2.1) * ws.r * 0.35 + (k - 1) * ws.r * 0.45;
+      const oy = Math.cos(gameTime * 0.22 + ws.ph + k * 1.7) * ws.r * 0.1;
+      const rr = ws.r * breathe * (0.75 + k * 0.18);
+      const g = ctx.createRadialGradient(sx2 + ox, sy2 + oy, 0, sx2 + ox, sy2 + oy, rr);
+      g.addColorStop(0, 'rgba(168,178,205,' + 0.13 * fade + ')');
+      g.addColorStop(0.55, 'rgba(160,170,200,' + 0.07 * fade + ')');
+      g.addColorStop(1, 'rgba(160,170,200,0)');
+      ctx.fillStyle = g;
+      ctx.save();
+      ctx.translate(sx2 + ox, sy2 + oy);
+      ctx.scale(1, 0.38); // приплюснут к земле
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, 0, 6.283);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 }
 
 // рисуется в мировых координатах (зовётся из draw после луж)
 function l2DrawWorld() {
+  // блуждающие болотные огоньки — мягкое сине-зелёное свечение
+  for (const lt of l2Lights) {
+    const fl = 0.7 + Math.sin(gameTime * 5 + lt.ph) * 0.2 + Math.sin(gameTime * 13 + lt.ph) * 0.1;
+    const hy = lt.y - 26 + Math.sin(gameTime * 1.6 + lt.ph) * 6;
+    const g = ctx.createRadialGradient(lt.x, hy, 0, lt.x, hy, 26);
+    g.addColorStop(0, 'rgba(160,240,230,' + 0.5 * fl + ')');
+    g.addColorStop(0.3, 'rgba(110,200,210,' + 0.22 * fl + ')');
+    g.addColorStop(1, 'rgba(90,180,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(lt.x, hy, 26, 0, 6.283); ctx.fill();
+    ctx.fillStyle = 'rgba(220,255,250,' + 0.85 * fl + ')';
+    ctx.beginPath(); ctx.arc(lt.x, hy, 2.6, 0, 6.283); ctx.fill();
+  }
+
+  // двойник героя: тёмный, полупрозрачный, смотрит на тебя
+  if (l2Double) {
+    const a = Math.min(0.5, l2Double.t * 0.3, (12 - l2Double.t) * 1.5);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    humanoid(ctx, gameTime, {
+      x: l2Double.x,
+      y: l2Double.y,
+      s: 1.05,
+      face: l2Double.face || 1,
+      walk: false,
+      phase: 0,
+      skin: '#6d7080',
+      shirt: '#3a3d4a',
+      pants: '#2c2438',
+      boots: '#1c1420',
+      hair: '#555a6d',
+      beard: '#555a6d',
+      belt: '#3d3444',
+      headgear: 'helm',
+      cloak: '#402030',
+      weapon: player.weapon,
+    });
+    ctx.restore();
+  }
+
   // глаза, мигающие в чаще
   for (const ey of l2Eyes) {
     const blink = Math.sin(gameTime * 2.2 + ey.blink) > -0.75 ? 1 : 0.1; // изредка моргают

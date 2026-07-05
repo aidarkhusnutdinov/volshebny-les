@@ -381,6 +381,7 @@ let mouseX = 0,
 
 const logEl = document.getElementById("log");
 const toastEl = document.getElementById("toast");
+const toast2El = document.getElementById("toast2");
 const bannerEl = document.getElementById("banner");
 let toastTimer = null,
   bannerTimer = null;
@@ -390,6 +391,17 @@ function toast(msg, color) {
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+}
+let toast2Timer = null;
+// тихое уведомление внизу по центру — для неважных событий (вороны, стоны, огоньки)
+function toastMinor(msg, color) {
+  logLine(msg, color);
+  if (!toast2El) return;
+  toast2El.textContent = msg;
+  toast2El.style.color = color || "#c9bfa0";
+  toast2El.classList.add("show");
+  clearTimeout(toast2Timer);
+  toast2Timer = setTimeout(() => toast2El.classList.remove("show"), 2600);
 }
 function logLine(msg, color) {
   // повтор той же строки не плодит новых — наращивает счётчик (×N)
@@ -2781,6 +2793,22 @@ function interact() {
   for (const h of hostages)
     if (!h.freed && !h.gone && Math.hypot(h.x - player.x, h.y - player.y) < 70)
       return freeHostage(h);
+  // E рядом с ягодами/клюквой — собираем сразу, без меню
+  for (const p of world.props) {
+    if (p.used) continue;
+    if (p.type !== "bush" && p.type !== "kljukva") continue;
+    if (Math.hypot(p.x - player.x, p.y - player.y) > 60) continue;
+    p.used = true;
+    AudioSys.pickup();
+    if (p.type === "bush") {
+      player.items.berries++;
+      addLog("Земляника — в котомку (клавиша 1 — съесть, +12).", "#8fd06a");
+    } else {
+      player.items.kljukva++;
+      addLog("Клюква — в котомку (клавиша 7 — съесть, +14).", "#8fd06a");
+    }
+    return;
+  }
   // E рядом со странником/жителем: разговор важнее деревьев и грибов вокруг
   for (const wn of wanderers)
     if (Math.hypot(wn.x - player.x, wn.y - player.y) < 90)

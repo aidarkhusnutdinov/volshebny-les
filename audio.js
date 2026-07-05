@@ -134,6 +134,11 @@ const AudioSys = (() => {
       noiseHit(0.8, 140, 55, 0.35, 'lowpass');
       noiseHit(0.4, 220, 90, 0.2, 'lowpass', 1, 0.35);
     },
+    bellUnder(v = 1) { // глухой колокол из-под земли — слышен ближе к ЯМЕ
+      bell(66, 3.6, 0.2 * v);
+      bell(49.5, 4.2, 0.09 * v, 0.06);
+      noiseHit(2.5, 120, 60, 0.06 * v, 'lowpass', 1, 0.1);
+    },
     raven() { // хриплое карканье ворона
       tone('sawtooth', 620, 380, 0.14, 0.12); noiseHit(0.12, 1400, 700, 0.14, 'bandpass', 2);
       tone('sawtooth', 560, 340, 0.16, 0.1, 0.24); noiseHit(0.13, 1300, 650, 0.12, 'bandpass', 2, 0.24);
