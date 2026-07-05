@@ -164,9 +164,9 @@ const BOSS_DATA = {
   },
   kalin: {
     name: "КАЛИН-ЦАРЬ",
-    hp: 3600,
-    dmg: 42,
-    speed: 108,
+    hp: 800,
+    dmg: 24,
+    speed: 95,
     weapon: "mace",
     xp: 500,
   },
@@ -362,6 +362,12 @@ let pools = []; // отравленные лужи говённого челов
 let alarmOn = false,
   gateHintT = 0; // тревога в замке и напоминание о запертых вратах
 let kalinAlerted = false; // раз включившись при входе в замок, держится до смерти Калина
+// смерть Калина: цепочка взрывов на его месте + крупная надпись в центре экрана
+let kalinBoomT = 0,
+  kalinBoomTick = 0,
+  kalinBannerT = 0,
+  kalinBoomX = 0,
+  kalinBoomY = 0;
 let metKinds; // какие виды врагов уже встречены (для подписи при первой встрече)
 let playerName = localStorage.getItem("bogatyr_name") || "Добрыня";
 const keys = {};
@@ -475,6 +481,7 @@ function newGame() {
   alarmOn = false;
   AudioSys.alarmStop();
   kalinAlerted = false;
+  kalinBoomT = kalinBannerT = 0;
   gateHintT = 0;
   logEl.innerHTML = "";
 
@@ -880,8 +887,17 @@ function killEnemy(e) {
     world.kalinLockdown = false; // ...ворота больше не заперты
     AudioSys.bossDie();
     AudioSys.fanfare(); // ...и звучит короткая победная
-    announce("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН! Земля вздохнула свободно.", "#8fd06a");
-    shake = 14;
+    addLog("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН! Земля вздохнула свободно.", "#8fd06a");
+    // царь взрывается снопом искр; надпись рисуется крупно в центре экрана (в draw)
+    kalinBoomX = e.x;
+    kalinBoomY = e.y;
+    kalinBoomT = 1.5;
+    kalinBoomTick = 0;
+    kalinBannerT = 4.2;
+    burst(e.x, e.y - 20, "#ffd76e", 40, 260, 60, 1.2);
+    burst(e.x, e.y - 20, "#ff6a30", 30, 210, 60, 1.0);
+    burst(e.x, e.y - 20, "#c23bd6", 22, 160, 60, 1.4);
+    shake = 24;
   } else if (e.isBoss) {
     AudioSys.bossDie();
     announce("☠ " + e.name + " повержен!", "#8fd06a");
@@ -930,6 +946,7 @@ function campCleared(camp) {
 }
 
 function checkVictory() {
+  if (kalinBannerT > 0) return; // сначала взрыв и надпись в центре, потом победный экран
   if (!victory && kalinDead && freedHostages === totalHostages) {
     victory = true;
     running = false;
@@ -2631,8 +2648,8 @@ function update(dt) {
       Math.hypot(player.x - pl.x, player.y - pl.y) < pl.r
     ) {
       if (pl.kind === "crack") {
-        player.poisonCd = 0.6;
-        directDamage(10, "#ff6a4a", "трещина"); // земля горит — от dodge не спастись
+        player.poisonCd = 0.7;
+        directDamage(6, "#ff6a4a", "трещина"); // земля горит — от dodge не спастись
         burst(player.x, player.y, "#8d8d85", 5, 60);
       } else {
         player.poisonCd = 0.8;
@@ -2692,11 +2709,14 @@ function update(dt) {
 
   // логово Калина: внутри стен — красный экран и тревожная музыка, пока царь жив
   const cca = world.castle;
+  // считаем только внутренность (без кольца стен и проёма ворот) — иначе
+  // тревога срабатывала, когда герой ещё стоял в арке ворот, ворота
+  // захлопывались под ним и выталкивали наружу, а звери успевали забежать внутрь
   const inCastle =
-    player.x > cca.x0 * TILE &&
-    player.x < (cca.x0 + cca.w) * TILE &&
-    player.y > cca.y0 * TILE &&
-    player.y < (cca.y0 + cca.h) * TILE;
+    player.x > (cca.x0 + 1) * TILE &&
+    player.x < (cca.x0 + cca.w - 1) * TILE &&
+    player.y > (cca.y0 + 1) * TILE &&
+    player.y < (cca.y0 + cca.h - 1) * TILE;
   if (inCastle && !kalinDead) kalinAlerted = true;
   if (kalinAlerted && !kalinDead) {
     if (!alarmOn) {
@@ -2710,6 +2730,24 @@ function update(dt) {
   } else if (alarmOn) {
     alarmOn = false;
     AudioSys.alarmStop();
+  }
+
+  // догорающая цепочка взрывов на месте павшего Калина
+  if (kalinBoomT > 0) {
+    kalinBoomT -= dt;
+    kalinBoomTick -= dt;
+    if (kalinBoomTick <= 0) {
+      kalinBoomTick = 0.13;
+      const bx = kalinBoomX + (Math.random() - 0.5) * 130,
+        by = kalinBoomY + (Math.random() - 0.5) * 90;
+      burst(bx, by, Math.random() < 0.5 ? "#ffd76e" : "#ff6a30", 14, 190, 80, 0.9);
+      shake = Math.max(shake, 8);
+      if (Math.random() < 0.4) AudioSys.stomp();
+    }
+  }
+  if (kalinBannerT > 0) {
+    kalinBannerT -= dt;
+    if (kalinBannerT <= 0) checkVictory(); // победный экран ждал, пока догорит взрыв
   }
 
   // напоминание у запертых врат
@@ -3260,12 +3298,12 @@ function updateEnemies(dt) {
           }
         }
         if (e.spCd <= 0 && td < 150) {
-          e.spCd = raged ? 2.25 : 4.5;
+          e.spCd = raged ? 3 : 4.5;
           AudioSys.stomp();
           shake = 11;
           addLog("Калин-царь ТОПАЕТ — каменные плиты трескаются!", "#ff9d7a");
           if (td < 160) {
-            hurtPlayer(70, e.x, e.y);
+            hurtPlayer(28, e.x, e.y);
           }
           burst(e.x, e.y, "#8d8d85", 16, 130);
           // трещины остаются на земле и жгут даже того, кто увернулся от самого удара
@@ -3285,9 +3323,9 @@ function updateEnemies(dt) {
           td < 450 &&
           !wallBetween(e.x, e.y - 20, target.x, target.y - 20)
         ) {
-          e.spCd = raged ? 1.6 : 3.2;
+          e.spCd = raged ? 2.2 : 3.5;
           const baseAng = Math.atan2(target.y - e.y - 30, target.x - e.x);
-          const n = raged ? 5 : 2;
+          const n = raged ? 3 : 2;
           const spread = raged ? 0.55 : 0.22;
           for (let i = 0; i < n; i++) {
             const off = n === 1 ? 0 : spread * (i / (n - 1) - 0.5) * 2;
@@ -3295,14 +3333,14 @@ function updateEnemies(dt) {
             projectiles.push({
               x: e.x,
               y: e.y - 40,
-              vx: Math.cos(a) * 380,
-              vy: Math.sin(a) * 380,
-              dmg: 50,
-              life: 3.5,
+              vx: Math.cos(a) * 340,
+              vy: Math.sin(a) * 340,
+              dmg: 15,
+              life: 2.5,
               kind: "bone",
               spin: 0,
               homing: true,
-              turnRate: 2.2,
+              turnRate: 1.2,
             });
           }
           floater(e.x, e.y - 80, "швыряет кости!", "#ff9d7a", 12);
@@ -3328,6 +3366,12 @@ function updateEnemies(dt) {
           e.y += ny;
         } // ковёр летит над всем
         else tryMove(e, nx, ny);
+        if (e.kind === "kalin") {
+          // царь не покидает замок — за ворота его не выманить
+          const cc = world.castle;
+          e.x = Math.max((cc.x0 + 1.4) * TILE, Math.min((cc.x0 + cc.w - 1.4) * TILE, e.x));
+          e.y = Math.max((cc.y0 + 1.4) * TILE, Math.min((cc.y0 + cc.h - 1.4) * TILE, e.y));
+        }
       } else {
         e.walk = false;
         if (e.cd <= 0) {
@@ -4192,6 +4236,29 @@ function draw() {
   if (player.rooted > 0) {
     ctx.fillStyle = "rgba(40,90,30,0.10)";
     ctx.fillRect(0, 0, VW, VH);
+  }
+
+  // смерть Калина — крупная надпись прямо в центре экрана, с плавным появлением/уходом
+  if (kalinBannerT > 0) {
+    const a = Math.max(
+      0,
+      Math.min(1, kalinBannerT > 3.6 ? (4.2 - kalinBannerT) / 0.6 : kalinBannerT / 1.1),
+    );
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.font = "bold 52px Georgia";
+    ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    ctx.lineWidth = 8;
+    ctx.strokeText("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН!", VW / 2, VH / 2 - 26);
+    ctx.fillStyle = "#ffd76e";
+    ctx.fillText("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН!", VW / 2, VH / 2 - 26);
+    ctx.font = "italic 22px Georgia";
+    ctx.lineWidth = 5;
+    ctx.strokeText("Земля вздохнула свободно", VW / 2, VH / 2 + 18);
+    ctx.fillStyle = "#e8d9a8";
+    ctx.fillText("Земля вздохнула свободно", VW / 2, VH / 2 + 18);
+    ctx.restore();
   }
 
   // стрелки к врагам за краем экрана — чтобы Соловей не резал соратников невидимкой
