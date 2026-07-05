@@ -147,6 +147,27 @@ const AudioSys = (() => {
         noiseHit(0.09, 420, 200, 0.09, 'lowpass', 1, i * 0.2);
       }
     },
+    droneStart() { // фоновый вой Тёмного леса: низкий гул + плачущее глиссандо
+      ensure();
+      if (this._droneId) return;
+      const wail = () => {
+        if (muted || !ctx) return;
+        // пара расстроенных басов — гудят всё время
+        tone('sine', 52, 49, 4.6, 0.09);
+        tone('sine', 78, 74, 4.6, 0.055, 0.3);
+        // воющий голос: медленно съезжает вниз, каждый раз чуть иначе
+        const f = 240 + Math.random() * 120;
+        tone('sine', f, f * (0.62 + Math.random() * 0.12), 3.8, 0.05, 0.8 + Math.random());
+        if (Math.random() < 0.4) tone('sine', f * 1.5, f * 0.9, 3.2, 0.03, 2 + Math.random());
+        // ветер в мёртвых кронах
+        noiseHit(3.8, 300 + Math.random() * 300, 700, 0.035, 'bandpass', 0.7, Math.random() * 1.5);
+      };
+      wail();
+      this._droneId = setInterval(wail, 4200);
+    },
+    droneStop() {
+      if (this._droneId) { clearInterval(this._droneId); this._droneId = null; }
+    },
     yamaVoice(v = 1) { // голос ЯМЫ: стон/всхлип/шёпот/смех; v 0..1 — ближе к яме громче
       const r = Math.random();
       if (r < 0.4) { // утробный стон

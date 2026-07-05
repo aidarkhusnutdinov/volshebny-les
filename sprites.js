@@ -84,24 +84,32 @@ function humanoid(ctx, time, o) {
   const s = o.s || 1;
   ctx.save();
   ctx.translate(o.x, o.y);
-  shadow(ctx, 0, 0, 14 * s);
+  if (!o.riding) shadow(ctx, 0, 0, 14 * s); // у всадника тень даёт зверь
   if (o.face < 0) ctx.scale(-1, 1);
   ctx.scale(s, s);
   const w = o.walk ? Math.sin(time * 11 + (o.phase || 0)) : 0;
   const bob = o.walk ? Math.abs(Math.cos(time * 11 + (o.phase || 0))) * 2 : Math.sin(time * 2 + (o.phase || 0)) * 0.7;
   ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(15,10,5,0.65)';
 
-  // ноги
   const legA = w * 7;
-  ctx.fillStyle = o.pants || '#4a3a24';
-  ctx.save(); ctx.translate(-4, -14); ctx.rotate(legA * 0.05); ctx.fillRect(-3, 0, 6, 15); ctx.restore();
-  ctx.save(); ctx.translate(4, -14); ctx.rotate(-legA * 0.05); ctx.fillRect(-3, 0, 6, 15); ctx.restore();
-  if (!o.barefoot) {
+  if (o.riding) {
+    // верхом: ноги согнуты и прижаты к боку зверя, ступня в «стремени»
+    ctx.fillStyle = o.pants || '#4a3a24';
+    ctx.save(); ctx.translate(2, -14); ctx.rotate(0.85); ctx.fillRect(-3, 0, 6, 11); ctx.restore();
     ctx.fillStyle = o.boots || '#2e2211';
-    ctx.fillRect(-8 + legA * 0.4, -3, 9, 4); ctx.fillRect(0 - legA * 0.4, -3, 9, 4);
+    ctx.fillRect(4, -6, 8, 4);
   } else {
-    ctx.fillStyle = o.skin;
-    ctx.fillRect(-7 + legA * 0.4, -3, 7, 3.4); ctx.fillRect(1 - legA * 0.4, -3, 7, 3.4);
+    // ноги
+    ctx.fillStyle = o.pants || '#4a3a24';
+    ctx.save(); ctx.translate(-4, -14); ctx.rotate(legA * 0.05); ctx.fillRect(-3, 0, 6, 15); ctx.restore();
+    ctx.save(); ctx.translate(4, -14); ctx.rotate(-legA * 0.05); ctx.fillRect(-3, 0, 6, 15); ctx.restore();
+    if (!o.barefoot) {
+      ctx.fillStyle = o.boots || '#2e2211';
+      ctx.fillRect(-8 + legA * 0.4, -3, 9, 4); ctx.fillRect(0 - legA * 0.4, -3, 9, 4);
+    } else {
+      ctx.fillStyle = o.skin;
+      ctx.fillRect(-7 + legA * 0.4, -3, 7, 3.4); ctx.fillRect(1 - legA * 0.4, -3, 7, 3.4);
+    }
   }
 
   ctx.translate(0, -bob);
@@ -630,6 +638,42 @@ function drawTree(ctx, time, tr, windX) {
       ctx.fillStyle = i % 2 ? '#2e5c33' : '#38683c';
       ctx.beginPath(); ctx.moveTo(-ww + sw * 0.5, yy); ctx.lineTo(sw, yy - 20 * s); ctx.lineTo(ww + sw * 0.5, yy); ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+  } else if (tr.kind === 'dark') { // кривое дерево Тёмного леса: чёрный витой ствол, багровая крона
+    ctx.strokeStyle = 'rgba(5,5,10,0.7)';
+    ctx.fillStyle = '#1c1620';
+    const tw = Math.sin(tr.phase) * 6; // изгиб у каждого свой
+    ctx.beginPath(); ctx.moveTo(-4.5 * s, 0);
+    ctx.quadraticCurveTo((-6 + tw) * s + sway * 0.4, -22 * s, (tw * 0.5 - 1.5) * s + sway, -44 * s);
+    ctx.lineTo((tw * 0.5 + 1.5) * s + sway, -44 * s);
+    ctx.quadraticCurveTo((6 + tw) * s + sway * 0.4, -20 * s, 4.5 * s, 0);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // корявые ветви-когти
+    ctx.strokeStyle = '#1c1620'; ctx.lineWidth = 2.4 * s;
+    ctx.beginPath(); ctx.moveTo(tw * 0.4 * s + sway, -36 * s);
+    ctx.quadraticCurveTo((tw + 12) * s + sway, -46 * s, (tw + 17) * s + sway, -40 * s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tw * 0.3 * s + sway, -30 * s);
+    ctx.quadraticCurveTo((tw - 13) * s + sway, -40 * s, (tw - 16) * s + sway, -33 * s); ctx.stroke();
+    ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(5,5,10,0.7)';
+    ctx.fillStyle = tr.watered > 0 ? '#3a2c46' : '#2c2236'; // тёмно-лиловая рваная крона
+    ctx.beginPath(); ctx.ellipse(sway + tw * 0.5 * s, -52 * s, 16 * s, 11 * s, 0.15, 0, 6.283); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#3d3050';
+    ctx.beginPath(); ctx.ellipse(sway + (tw * 0.5 - 6) * s, -57 * s, 7 * s, 5 * s, 0, 0, 6.283); ctx.fill();
+  } else if (tr.kind === 'deadtree') { // мёртвое голое дерево — скрюченный скелет
+    ctx.strokeStyle = '#241c18'; ctx.lineWidth = 3.6 * s; ctx.lineCap = 'round';
+    const tw = Math.sin(tr.phase * 2) * 8;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo((tw * 0.6) * s + sway * 0.5, -24 * s, tw * s + sway, -46 * s); ctx.stroke();
+    ctx.lineWidth = 2 * s;
+    for (const [dx, dy, ex, ey] of [[0.3, -30, 14, -44], [0.5, -38, -12, -50], [0.8, -44, 7, -58], [0.2, -20, -11, -30]]) {
+      ctx.beginPath(); ctx.moveTo(tw * dx * s + sway * 0.6, dy * s);
+      ctx.quadraticCurveTo((tw * dx + ex * 0.6) * s + sway, (dy + ey * 0.3) * s, (tw * dx + ex) * s + sway, ey * s + dy * s * 0.3);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt'; ctx.lineWidth = 1.3;
+    if (Math.sin(time * 0.7 + tr.phase) > 0.93) { // изредка на ветке — ворон?.. нет, просто тень
+      ctx.fillStyle = 'rgba(10,8,12,0.8)';
+      ctx.beginPath(); ctx.ellipse(tw * 0.5 * s + sway, -45 * s, 3 * s, 2 * s, 0, 0, 6.283); ctx.fill();
+    }
   } else { // oak
     ctx.fillStyle = '#6b4c22';
     ctx.beginPath(); ctx.moveTo(-4.5 * s, 0); ctx.quadraticCurveTo(-3 * s + sway * 0.5, -25 * s, -2 * s + sway, -40 * s);
@@ -684,6 +728,53 @@ function drawProp(ctx, p, time) {
   ctx.save(); ctx.translate(p.x, p.y);
   ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(20,15,5,0.5)';
   switch (p.type) {
+    case 'web': { // паутина Тёмного леса — растянута между ветвями
+      const ws = p.s || 1;
+      ctx.strokeStyle = 'rgba(220,220,235,0.32)'; ctx.lineWidth = 0.9;
+      const sway2 = Math.sin(time * 1.1 + p.x) * 1.5;
+      ctx.save(); ctx.translate(sway2, -34 * ws); ctx.rotate(p.rot || 0);
+      for (let i = 0; i < 6; i++) { // радиальные нити
+        const a = i * 1.047;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 22 * ws, Math.sin(a) * 18 * ws); ctx.stroke();
+      }
+      for (let r = 1; r <= 3; r++) { // круговые, слегка провисшие
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) {
+          const a = i * 1.047;
+          const rr = r * 6.5 * ws + (i % 2) * 1.5;
+          const px2 = Math.cos(a) * rr, py2 = Math.sin(a) * rr * 0.82 + r;
+          i === 0 ? ctx.moveTo(px2, py2) : ctx.quadraticCurveTo(Math.cos(a - 0.52) * rr * 1.04, Math.sin(a - 0.52) * rr * 0.86 + r + 2, px2, py2);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
+    case 'kljukva': // болотная клюква — красные бусины на кочке
+      shadow(ctx, 0, 0, 9);
+      ctx.fillStyle = '#3d4a30';
+      ctx.beginPath(); ctx.ellipse(0, -4, 10, 6, 0, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = '#2c3a24'; ctx.lineWidth = 1.2;
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 3, -6); ctx.quadraticCurveTo(i * 4, -12, i * 3.5, -14); ctx.stroke(); }
+      if (!p.used) {
+        ctx.fillStyle = '#b3271d';
+        for (const [bx, by] of [[-5, -9], [0, -13], [5, -8], [2, -6], [-2, -11]]) { ctx.beginPath(); ctx.arc(bx, by, 2, 0, 6.283); ctx.fill(); }
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        for (const [bx, by] of [[-5.7, -9.7], [-0.7, -13.7]]) { ctx.beginPath(); ctx.arc(bx, by, 0.7, 0, 6.283); ctx.fill(); }
+      }
+      break;
+    case 'gnilushka': // трухлявый пень со светящимися гнилушками
+      shadow(ctx, 0, 0, 10);
+      ctx.fillStyle = '#3a3228'; ctx.strokeStyle = '#241c14'; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-7, -13); ctx.lineTo(-2, -10); ctx.lineTo(0, -16); ctx.lineTo(3, -9); ctx.lineTo(7, -12); ctx.lineTo(8, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      if (!p.used) {
+        const gl = 0.5 + Math.sin(time * 2.2 + p.x) * 0.25;
+        ctx.fillStyle = 'rgba(140,240,170,' + gl + ')';
+        for (const [gx, gy, gr] of [[-4, -6, 2.2], [2, -4, 1.8], [5, -8, 1.5], [-1, -12, 1.6]]) { ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 6.283); ctx.fill(); }
+        ctx.fillStyle = 'rgba(140,240,170,' + gl * 0.25 + ')';
+        ctx.beginPath(); ctx.arc(0, -8, 13, 0, 6.283); ctx.fill();
+      }
+      break;
     case 'stone':
       shadow(ctx, 0, 0, 11);
       ctx.fillStyle = '#8d8f88'; ctx.beginPath();

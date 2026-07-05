@@ -39,20 +39,20 @@ const L2_ANIMAL_COUNTS = {
 
 // ---------- дикие враги тёмного леса ----------
 const L2_WILD = {
-  derevo: { name: 'Дерево-морок', hp: 160, dmg: 14, speed: 42, xp: 45, n: 6 },
-  spider: { name: 'Паук', hp: 70, dmg: 10, speed: 160, xp: 30, n: 4 },
-  redshadow: { name: 'Красная тень', hp: 55, dmg: 16, speed: 195, xp: 40, n: 3 },
-  nav: { name: 'Навья', hp: 65, dmg: 12, speed: 185, xp: 40, n: 3 },
-  utopl: { name: 'Утопленница', hp: 95, dmg: 15, speed: 185, xp: 45, n: 3 },
-  cherny: { name: 'Чёрный', hp: 130, dmg: 13, speed: 120, xp: 45, n: 3 },
-  bat: { name: 'Летучая мышь', hp: 30, dmg: 6, speed: 210, xp: 15, n: 5 },
-  croc: { name: 'Крокодил', hp: 140, dmg: 18, speed: 130, xp: 50, n: 3 },
-  vodyanoy: { name: 'Водяной', hp: 110, dmg: 12, speed: 90, xp: 50, n: 2 },
-  likho: { name: 'Лихо Одноглазое', hp: 9999, dmg: 16, speed: 72, xp: 0, n: 1 },
-  suka: { name: 'Сука', hp: 85, dmg: 14, speed: 170, xp: 35, n: 3 },
-  chert: { name: 'Чёрт', hp: 65, dmg: 7, speed: 175, xp: 25, n: 4 },
-  chudo: { name: 'Чудо-юдо', hp: 500, dmg: 24, speed: 55, xp: 120, n: 1 },
-  lesnoy: { name: 'Лесной разбойник', hp: 75, dmg: 12, speed: 125, xp: 35, n: 4, weapon: 'club' },
+  derevo: { name: 'Дерево-морок', hp: 160, dmg: 14, speed: 42, xp: 45, n: 9 },
+  spider: { name: 'Паук', hp: 70, dmg: 10, speed: 160, xp: 30, n: 7 },
+  redshadow: { name: 'Красная тень', hp: 55, dmg: 16, speed: 195, xp: 40, n: 5 },
+  nav: { name: 'Навья', hp: 65, dmg: 12, speed: 185, xp: 40, n: 5 },
+  utopl: { name: 'Утопленница', hp: 95, dmg: 15, speed: 185, xp: 45, n: 5 },
+  cherny: { name: 'Чёрный', hp: 130, dmg: 13, speed: 120, xp: 45, n: 5 },
+  bat: { name: 'Летучая мышь', hp: 30, dmg: 6, speed: 210, xp: 15, n: 8 },
+  croc: { name: 'Крокодил', hp: 140, dmg: 18, speed: 130, xp: 50, n: 5 },
+  vodyanoy: { name: 'Водяной', hp: 110, dmg: 12, speed: 90, xp: 50, n: 3 },
+  likho: { name: 'Лихо Одноглазое', hp: 9999, dmg: 16, speed: 72, xp: 0, n: 2 },
+  suka: { name: 'Сука', hp: 85, dmg: 14, speed: 170, xp: 35, n: 5 },
+  chert: { name: 'Чёрт', hp: 65, dmg: 7, speed: 175, xp: 25, n: 6 },
+  chudo: { name: 'Чудо-юдо', hp: 500, dmg: 24, speed: 55, xp: 120, n: 2 },
+  lesnoy: { name: 'Лесной разбойник', hp: 75, dmg: 12, speed: 125, xp: 35, n: 6, weapon: 'club' },
 };
 
 const L2_BOSSES = {
@@ -96,7 +96,7 @@ function generateWorld2(seed) {
     const e = elevN(x / 26, y / 26), f = forestN(x / 18, y / 18), rv = ravN(x / 21, y / 21);
     let t = T.FOREST;
     if (e < 0.34) t = T.WATER;
-    else if (e < 0.37) t = T.SAND;
+    else if (e < 0.42) t = T.SWAMP; // вокруг чёрной воды — топи, в них вязнешь
     else if (Math.abs(rv - 0.5) < 0.028 && e > 0.45) t = T.RAVINE;
     else if (f < 0.34) t = T.GRASS; // редкие поляны
     terrain[idx(x, y)] = t;
@@ -147,7 +147,7 @@ function generateWorld2(seed) {
       for (const [px, py] of [[x, y], [x + 1, y]]) {
         if (px < 1 || py < 1 || px >= MAP_W - 1 || py >= MAP_H - 1) continue;
         const t = terrain[idx(px, py)];
-        if (t === T.WATER || t === T.SAND) terrain[idx(px, py)] = T.BRIDGE_W;
+        if (t === T.WATER || t === T.SAND || t === T.SWAMP) terrain[idx(px, py)] = T.BRIDGE_W;
         else if (t === T.RAVINE) terrain[idx(px, py)] = T.BRIDGE_R;
         else if (t === T.GRASS || t === T.FOREST) terrain[idx(px, py)] = T.DIRT;
       }
@@ -197,21 +197,34 @@ function generateWorld2(seed) {
   // --- деревья: тёмные ели да кривые дубы, гуще обычного ---
   for (let y = 1; y < MAP_H - 1; y++) for (let x = 1; x < MAP_W - 1; x++) {
     const t = terrain[idx(x, y)];
+    if (t === T.SWAMP) {
+      // на топях растёт клюква
+      if (rnd() < 0.03)
+        world.props.push({ type: 'kljukva', x: (x + 0.2 + rnd() * 0.6) * TILE, y: (y + 0.2 + rnd() * 0.6) * TILE, used: false });
+      continue;
+    }
     if (t !== T.GRASS && t !== T.FOREST) continue;
     const f = forestN(x / 18, y / 18);
     const dense = t === T.FOREST;
     const chance = dense ? 0.5 : (f > 0.4 ? 0.08 : 0.02);
     if (rnd() < chance) {
       const r = rnd();
-      const kind = r < 0.6 ? 'spruce' : (r < 0.88 ? 'oak' : 'birch');
+      // чаща из кривых чёрных деревьев и мёртвых остовов, редкие ели
+      const kind = r < 0.5 ? 'dark' : (r < 0.75 ? 'deadtree' : 'spruce');
       world.trees.push({
         x: (x + 0.15 + rnd() * 0.7) * TILE, y: (y + 0.15 + rnd() * 0.7) * TILE,
         kind, size: 0.9 + rnd() * 0.6, bend: 0, bendV: 0, phase: rnd() * 6.28, alive: true, watered: 0,
       });
-    } else if (rnd() < 0.014) {
+      // всё завешано паутиной
+      if (rnd() < 0.16)
+        world.props.push({
+          type: 'web', x: (x + 0.3 + rnd() * 0.4) * TILE, y: (y + 0.7) * TILE,
+          s: 0.8 + rnd() * 0.9, rot: (rnd() - 0.5) * 0.8,
+        });
+    } else if (rnd() < 0.018) {
       const r = rnd();
       world.props.push({
-        type: r < 0.4 ? 'mushroom' : r < 0.6 ? 'stone' : r < 0.75 ? 'bush' : r < 0.9 ? 'stump' : 'bones',
+        type: r < 0.28 ? 'mushroom' : r < 0.44 ? 'gnilushka' : r < 0.58 ? 'stone' : r < 0.72 ? 'bush' : r < 0.88 ? 'stump' : 'bones',
         x: (x + 0.2 + rnd() * 0.6) * TILE, y: (y + 0.2 + rnd() * 0.6) * TILE, used: false,
       });
     }
@@ -278,7 +291,7 @@ function newGame2() {
   world = generateWorld2((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   enemies = []; animals = []; hostages = []; wanderers = [];
   groundItems = []; projectiles = []; particles = []; floaters = [];
-  pools = []; l2Waves = [];
+  pools = []; l2Waves = []; l2Falls = []; l2EventT = 16;
   chunkCache = new Map();
   gameOver = false; victory = false; kalinDead = true;
   freedHostages = 0; totalHostages = 0;
@@ -327,6 +340,30 @@ function newGame2() {
     if (camp.kind === 'lono') boss.barOy = 70;
     enemies.push(boss);
     camp.guards = [boss];
+    // свита: у каждого хозяина леса — свои слуги
+    const RETINUE = {
+      shurale: ['spider', 'spider', 'spider'],
+      lono: ['utopl', 'utopl', 'nav'],
+      noga: ['chert', 'chert', 'chert'],
+      velikan: ['lesnoy', 'lesnoy', 'suka'],
+    };
+    for (const gk of RETINUE[camp.kind] || []) {
+      const gw = L2_WILD[gk];
+      const g = mkEnemy(gk === 'lesnoy' ? 'bandit' : gk,
+        camp.x + (rnd() - 0.5) * 180, camp.y + 40 + (rnd() - 0.5) * 120, {
+          name: gw.name,
+          hp: Math.round(gw.hp * scale),
+          dmg: Math.round(gw.dmg * scale),
+          speed: gw.speed,
+          weapon: gw.weapon || null,
+          xp: gw.xp,
+        });
+      g.camp = camp;
+      if (gk === 'lesnoy') g.lure = true;
+      if (gk === 'chert') g.tint = CHERT_COLORS[Math.floor(rnd() * CHERT_COLORS.length)];
+      enemies.push(g);
+      camp.guards.push(g);
+    }
     world.props.push({ type: 'campfire', x: camp.x + 45, y: camp.y + 35 });
     world.props.push({ type: 'bones', x: camp.x - 60, y: camp.y + 30, used: false });
     if (camp.treasure) world.props.push({ type: 'chest', x: camp.x - 55, y: camp.y - 50, used: false });
@@ -430,6 +467,7 @@ function newGame2() {
   mapMiniCtx.fillRect(0, 0, MAP_W, MAP_H);
   updateFog(true);
   updateObjective();
+  AudioSys.droneStart(); // постоянный фоновый вой тёмного леса
   document.getElementById('heroName').textContent = 'Богатырь ' + playerName;
   announce('ТЁМНЫЙ ЛЕС. Здесь Русь кончается...', '#c9a0e8');
   addLog('Одолей четырёх хозяев леса — тогда пробудится ЯМА. Изведи её.', '#c9a0e8');
@@ -444,6 +482,7 @@ function mkL2Animal(sp, x, y, rnd) {
     dir: rnd() * 6.283, tamed: false, tameBonus: 0, scared: 0, cd: 0,
     maxHp: ANIMALS[sp].hp, homeX: x, homeY: y,
   };
+  a.tame *= 0.55; // тёмный лес: зверьё пуганое, доверие даётся трудно
   if (sp === 'deer') {
     // в тёмном лесу олени белые — как призраки
     a.name = 'Белый олень';
@@ -727,8 +766,86 @@ const L2AI = {
   },
 };
 
+// ---------- случайные ужасы леса: земля разверзается, с неба падает ----------
+let l2EventT = 16,
+  l2Falls = [];
+
+function l2Quake() {
+  announce('Земля дрожит и РАЗВЕРЗАЕТСЯ под ногами!', '#ff6a4a');
+  AudioSys.stomp();
+  AudioSys.crack();
+  shake = 16;
+  const n = 3 + Math.floor(Math.random() * 3);
+  let sx2 = 0, sy2 = 0, placed = 0;
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * 6.283, d = 70 + Math.random() * 230;
+    const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
+    if (!world.passable(x, y)) continue;
+    pools.push({ x, y, r: 46, t: 4.5, max: 4.5, kind: 'crack' });
+    burst(x, y, '#3d3128', 16, 130);
+    burst(x, y, '#ff6a30', 8, 90);
+    sx2 = x; sy2 = y; placed++;
+  }
+  // из разлома выкарабкивается нечисть
+  if (placed && Math.random() < 0.65) {
+    const sc = world.l2Scale || 1;
+    const e = mkEnemy('ruka', sx2, sy2, {
+      name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: 10,
+    });
+    e.fromYama = true;
+    enemies.push(e);
+    AudioSys.zombiePull();
+  }
+}
+
+function l2SkyFall() {
+  toast('С чёрного неба что-то падает!', '#c9a0e8');
+  AudioSys.wind();
+  const n = 4 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) {
+    l2Falls.push({
+      x: player.x + (Math.random() - 0.5) * 560,
+      y: player.y + (Math.random() - 0.5) * 400,
+      h: 380 + Math.random() * 200, // высота падения
+      kind: Math.random() < 0.6 ? 'crow' : 'stone',
+      spin: Math.random() * 6.283,
+    });
+  }
+}
+
 // ---------- обновление уровня 2 (зовётся из update) ----------
 function l2Update(dt) {
+  // редкие внезапные ужасы — лес живёт своей злой жизнью
+  l2EventT -= dt;
+  if (l2EventT <= 0) {
+    l2EventT = 20 + Math.random() * 22;
+    if (Math.random() < 0.5) l2Quake();
+    else l2SkyFall();
+  }
+
+  // падающее с неба долетает до земли
+  for (let i = l2Falls.length - 1; i >= 0; i--) {
+    const f = l2Falls[i];
+    f.h -= 620 * dt;
+    f.spin += dt * 9;
+    if (f.h > 0) continue;
+    l2Falls.splice(i, 1);
+    if (f.kind === 'crow') {
+      burst(f.x, f.y, '#1c1620', 10, 80);
+      addLog('Мёртвый ворон шмякнулся оземь.', '#c9a0e8');
+    } else {
+      burst(f.x, f.y, '#8d8d85', 12, 110);
+      AudioSys.stomp();
+      shake = Math.max(shake, 5);
+    }
+    const dmg = f.kind === 'stone' ? 16 : 8;
+    if (Math.hypot(player.x - f.x, player.y - f.y) < 38)
+      hurtPlayer(Math.round(dmg * (world.l2Scale || 1)), f.x, f.y);
+    for (const pet of player.pets)
+      if (pet.hp > 0 && Math.hypot(pet.x - f.x, pet.y - f.y) < 38)
+        hurtPet(pet, dmg);
+  }
+
   // убийственные волны Лона
   for (let i = l2Waves.length - 1; i >= 0; i--) {
     const w = l2Waves[i];
@@ -779,6 +896,34 @@ function l2Update(dt) {
 
 // рисуется в мировых координатах (зовётся из draw после луж)
 function l2DrawWorld() {
+  // падающее с неба: тень растёт, тушка/камень снижается
+  for (const f of l2Falls) {
+    const t01 = 1 - Math.min(1, f.h / 500);
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.1 + t01 * 0.28) + ')';
+    ctx.beginPath();
+    ctx.ellipse(f.x, f.y, 5 + t01 * 11, (5 + t01 * 11) * 0.4, 0, 0, 6.283);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(f.x, f.y - f.h);
+    ctx.rotate(f.spin);
+    if (f.kind === 'crow') {
+      // мёртvый ворон — комок перьев, крылья враскид
+      ctx.fillStyle = '#1c1620';
+      ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(-16, -6); ctx.lineTo(-7, 3); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(15, -7); ctx.lineTo(7, 3); ctx.fill();
+      ctx.fillStyle = '#e8b23a';
+      ctx.beginPath(); ctx.moveTo(8, -1); ctx.lineTo(12, 0); ctx.lineTo(8, 1.5); ctx.fill();
+    } else {
+      ctx.fillStyle = '#8d8d85';
+      ctx.beginPath();
+      ctx.moveTo(-7, 3); ctx.lineTo(-6, -5); ctx.lineTo(0, -8); ctx.lineTo(6, -4); ctx.lineTo(7, 4); ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath(); ctx.ellipse(-2, -3, 3, 1.6, -0.3, 0, 6.283); ctx.fill();
+    }
+    ctx.restore();
+  }
   for (const w of l2Waves) {
     const a = Math.max(0, 0.65 - w.r / 600);
     ctx.strokeStyle = 'rgba(194,59,214,' + a + ')';
@@ -834,6 +979,7 @@ function l2Victory() {
   if (victory) return;
   victory = true;
   running = false;
+  AudioSys.droneStop();
   AudioSys.victory();
   showOverlay(
     'ТЬМА РАЗВЕЯНА!',
@@ -946,7 +1092,10 @@ function l2WandererMenu(wn, cx, cy) {
         label: '🙇 Поклониться',
         fn: () => {
           addLog(npc.title + ' кланяется в ответ. Добро помнится.', '#cbb87f');
-          gainXP(3);
+          if (!wn.bowed) {
+            wn.bowed = true;
+            gainXP(3);
+          }
         },
       },
     ],
@@ -1385,12 +1534,31 @@ const L2DRAW = {
     ctx.quadraticCurveTo(44, -12, 48, -6);
     ctx.quadraticCurveTo(48, 0, 40, 0);
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    // пальцы
-    ctx.fillStyle = '#c9927a';
-    for (let i = 0; i < 4; i++) {
+    // пальцы: большой впереди, остальные убывают по дуге, каждый с грязным ногтем
+    for (let i = 0; i < 5; i++) {
+      const tx = 45 - i * 6.8,
+        ty = -3 - Math.sin(i * 0.55) * 3,
+        tr = 6.8 - i * 1.05;
+      ctx.fillStyle = e.hurtT ? '#d6a888' : '#c9927a';
       ctx.beginPath();
-      ctx.ellipse(46 - i * 1.5, -4 + i * 0.5, 6 - i, 5 - i * 0.7, 0, 0, 6.283);
+      ctx.ellipse(tx, ty, tr, tr * 0.85, 0, 0, 6.283);
       ctx.fill(); ctx.stroke();
+      // перетяжка у основания пальца
+      ctx.strokeStyle = 'rgba(90,60,40,0.45)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(tx - tr * 0.9, ty, tr * 0.7, -0.9, 0.9); ctx.stroke();
+      ctx.lineWidth = 1.8; ctx.strokeStyle = 'rgba(40,25,10,0.7)';
+      // жёлтый обломанный ноготь с грязью под ним
+      ctx.fillStyle = '#b0a476';
+      ctx.beginPath();
+      ctx.moveTo(tx + tr * 0.2, ty - tr * 0.55);
+      ctx.lineTo(tx + tr * 0.95, ty - tr * 0.35);
+      ctx.lineTo(tx + tr * 1.0, ty + tr * 0.15);
+      ctx.lineTo(tx + tr * 0.25, ty + tr * 0.1);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(60,45,25,0.75)';
+      ctx.beginPath();
+      ctx.ellipse(tx + tr * 0.95, ty - tr * 0.1, tr * 0.18, tr * 0.3, 0, 0, 6.283);
+      ctx.fill();
     }
     // грязь
     ctx.fillStyle = 'rgba(90,70,40,0.55)';

@@ -88,6 +88,8 @@ const ITEM_DEFS = [
   { id: "honey", key: "4", icon: "🍯", name: "Мёд" },
   { id: "bouquet", key: "5", icon: "💐", name: "Букет" },
   { id: "meat", key: "6", icon: "🥩", name: "Припасы" },
+  { id: "kljukva", key: "7", icon: "🔴", name: "Клюква болотная" },
+  { id: "gnilushka", key: "8", icon: "🟢", name: "Гнилушка" },
 ];
 
 // огненное дыхание драконов: чем больше дракон, тем дальше и больнее
@@ -466,6 +468,7 @@ function hearts(x, y, n = 5) {
 // ---------- создание мира ----------
 function newGame() {
   level = 1;
+  if (AudioSys.droneStop) AudioSys.droneStop(); // вой Тёмного леса остаётся в лесу
   world = generateWorld((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   enemies = [];
   animals = [];
@@ -514,7 +517,7 @@ function newGame() {
     pets: [],
     wood: 0,
     rage: 0,
-    items: { berries: 0, mushroom: 0, fish: 0, honey: 0, bouquet: 0, meat: 0 },
+    items: { berries: 0, mushroom: 0, fish: 0, honey: 0, bouquet: 0, meat: 0, kljukva: 0, gnilushka: 0 },
     stepT: 0,
     paralyzed: 0,
     rooted: 0,
@@ -996,6 +999,7 @@ function checkVictory() {
 function doGameOver() {
   gameOver = true;
   running = false;
+  if (AudioSys.droneStop) AudioSys.droneStop();
   AudioSys.gameover();
   showOverlay(
     "БОГАТЫРЬ ПАЛ",
@@ -1372,13 +1376,21 @@ function openMenu(clientX, clientY, title, options, target) {
 
 function customWord(word, target, title) {
   const w = word.toLowerCase();
+  // из слов нельзя доить опыт и здоровье бесконечно
+  const rewardOk = !player.wordAt || gameTime - player.wordAt > 25;
+  const reward = (fn) => {
+    if (rewardOk) {
+      player.wordAt = gameTime;
+      fn();
+    }
+  };
   const px = target && target.x !== undefined ? target.x : player.x;
   const py = target && target.y !== undefined ? target.y : player.y;
   if (/поцел|обня|любл/.test(w)) {
     hearts(px, py, 7);
     AudioSys.pet();
     addLog("Ты " + word.toLowerCase() + " — и на душе теплее.", "#e8a0b4");
-    gainXP(2);
+    reward(() => gainXP(2));
   } else if (/подж|сжеч|сожг|огонь/.test(w))
     addLog("Богатырь не жжёт родную землю. Не бывать тому.", "#ff9d7a");
   else if (/удар|бей|руби|круши/.test(w)) {
@@ -1387,15 +1399,18 @@ function customWord(word, target, title) {
     addLog("Хрясь! Аж искры полетели.", "#e8d9a8");
   } else if (/молит|перекрест|господ/.test(w)) {
     burst(player.x, player.y - 40, "#fff8d0", 10, 40, -60, 1.3);
-    healPlayer(10);
+    if (rewardOk) healPlayer(10);
+    player.wordAt = gameTime;
     addLog(
-      "Помолился. На сердце легче, раны затянулись (+10 здоровья).",
+      rewardOk
+        ? "Помолился. На сердце легче, раны затянулись (+10 здоровья)."
+        : "Помолился ещё раз. Бог слышал и в первый.",
       "#fff0b0",
     );
   } else if (/спой|пой|песн/.test(w)) {
     AudioSys.birds();
     addLog("Ты затянул песню. " + title + " слушает, разинув рот.", "#a0e8ff");
-    gainXP(3);
+    reward(() => gainXP(3));
   } else if (/съес|съеш|куша|жри/.test(w))
     addLog("Это в рот не лезет. Богатырь брезгливо поморщился.", "#cbb87f");
   else {
@@ -1459,9 +1474,14 @@ function tryContext(clientX, clientY) {
         });
     }
   for (const wn of wanderers) {
-    const d = Math.hypot(wn.x - wx, wn.y - wy);
-    if (d < 40)
-      cands.push({ d, o: wn, open: () => wandererMenu(wn, clientX, clientY) });
+    const d = Math.hypot(wn.x - wx, wn.y - 20 - wy);
+    // со странником заговорить важнее, чем ткнуть в дерево за его спиной
+    if (d < 46)
+      cands.push({
+        d: d - 16,
+        o: wn,
+        open: () => wandererMenu(wn, clientX, clientY),
+      });
   }
   for (const p of world.props) {
     const d = Math.hypot(p.x - wx, p.y - wy);
@@ -1805,7 +1825,10 @@ function wandererMenu(wn, cx, cy) {
         label: "🙇 Поклониться",
         fn: () => {
           addLog("Странник кланяется в ответ. Добро помнится.", "#cbb87f");
-          gainXP(3);
+          if (!wn.bowed) {
+            wn.bowed = true;
+            gainXP(3);
+          }
         },
       },
     ],
@@ -1917,6 +1940,65 @@ function propMenu(p, cx, cy) {
           label: "🫣 Спрятаться",
           fn: () =>
             addLog("Присел за кустом. Богатырь в кусте виден весь.", "#cbb87f"),
+        },
+      ],
+    ],
+    kljukva: [
+      "Клюквенная кочка",
+      [
+        {
+          label: "🔴 Собрать клюкву",
+          fn: () => {
+            if (!p.used) {
+              p.used = true;
+              player.items.kljukva++;
+              AudioSys.pickup();
+              addLog(
+                "Клюква болотная — в котомку (клавиша 7 — съесть, +14).",
+                "#8fd06a",
+              );
+            } else addLog("Кочка обобрана дочиста.");
+          },
+        },
+      ],
+    ],
+    gnilushka: [
+      "Трухлявый пень",
+      [
+        {
+          label: "🟢 Взять гнилушку",
+          fn: () => {
+            if (!p.used) {
+              p.used = true;
+              player.items.gnilushka++;
+              AudioSys.pickup();
+              addLog(
+                "Светящаяся гнилушка — в котомку (клавиша 8 — вспышка, пугает нечисть).",
+                "#8cf0aa",
+              );
+            } else addLog("Пень давно потух.");
+          },
+        },
+        {
+          label: "👁 Осмотреть",
+          fn: () =>
+            addLog(
+              "Гнилое дерево светится мертвенным светом. Нечисть его боится.",
+              "#8cf0aa",
+            ),
+        },
+      ],
+    ],
+    web: [
+      "Паутина",
+      [
+        {
+          label: "👁 Осмотреть",
+          fn: () =>
+            addLog(
+              "Паутина в руку толщиной. Хозяин где-то рядом...",
+              "#c9a0e8",
+            ),
         },
       ],
     ],
@@ -2129,6 +2211,9 @@ function propMenu(p, cx, cy) {
         {
           label: "🔥 Погреться",
           fn: () => {
+            if (p.warmedAt && gameTime - p.warmedAt < 30)
+              return addLog("Ты уже согрелся. Посиди, но сил больше не прибудет.", "#cbb87f");
+            p.warmedAt = gameTime;
             healPlayer(6);
             addLog("Тепло... (+6)", "#8fd06a");
           },
@@ -2190,6 +2275,9 @@ function propMenu(p, cx, cy) {
         {
           label: "🙏 Помянуть",
           fn: () => {
+            if (p.mourned)
+              return addLog("Эти души уже помянуты. Покойтесь с миром.", "#cbb87f");
+            p.mourned = true;
             addLog(
               "Упокой, Господи, души невинные. На сердце тяжко, в руке — твёрдость.",
               "#cbb87f",
@@ -2229,7 +2317,10 @@ function propMenu(p, cx, cy) {
               "#ff9d7a",
             );
             if (kalinRef && !kalinRef.dead) kalinRef.spCd = 0.1;
-            gainXP(10);
+            if (!p.flipped) {
+              p.flipped = true;
+              gainXP(10);
+            }
           },
         },
       ],
@@ -2312,6 +2403,33 @@ function useItem(id) {
       AudioSys.eat();
       addLog("Дикий мёд — сила! (+30)", "#8fd06a");
       break;
+    case "kljukva":
+      player.items.kljukva--;
+      healPlayer(14);
+      AudioSys.eat();
+      addLog("Кислющая болотная клюква — аж скулы свело (+14).", "#8fd06a");
+      break;
+    case "gnilushka": {
+      // светящаяся гнилушка: вспышка мертвенного света — нечисть шарахается
+      player.items.gnilushka--;
+      burst(player.x, player.y - 30, "#8cf0aa", 26, 180, -20, 1.1);
+      AudioSys.magic();
+      let scaredN = 0;
+      for (const e of enemies) {
+        if (e.dead || e.isBoss || e.kind === "likho") continue;
+        if (Math.hypot(e.x - player.x, e.y - player.y) < 320) {
+          e.fleeT = Math.max(e.fleeT || 0, 2.2);
+          scaredN++;
+        }
+      }
+      addLog(
+        scaredN
+          ? "Гнилушка вспыхнула мертвенным светом — нечисть шарахнулась прочь!"
+          : "Гнилушка вспыхнула и истлела. Вокруг никого не было.",
+        "#8cf0aa",
+      );
+      break;
+    }
     case "meat": {
       // сырое не едят — жарим, если рядом костёр
       let fire = null;
@@ -2553,7 +2671,7 @@ window.addEventListener("keydown", (e) => {
     addLog(m ? "Звук выключен." : "Звук включён.");
   }
   if (e.code === "Escape") closeMenu();
-  if (/^Digit[1-5]$/.test(e.code)) {
+  if (/^Digit[1-8]$/.test(e.code)) {
     const it = ITEM_DEFS[+e.code.slice(5) - 1];
     if (it) useItem(it.id);
   }
@@ -2621,6 +2739,10 @@ function interact() {
   for (const h of hostages)
     if (!h.freed && !h.gone && Math.hypot(h.x - player.x, h.y - player.y) < 70)
       return freeHostage(h);
+  // E рядом со странником/жителем: разговор важнее деревьев и грибов вокруг
+  for (const wn of wanderers)
+    if (Math.hypot(wn.x - player.x, wn.y - player.y) < 90)
+      return wandererMenu(wn, wn.x - camX, wn.y - 30 - camY);
   // E рядом со зверем: пока доверие мало — гладит, как доверие накопится — приручает
   for (const a of animals)
     if (
@@ -2647,10 +2769,16 @@ function interact() {
   for (const tr of world.trees) if (tr.alive && consider(tr.x, tr.y)) best = tr;
   for (const b of world.buildings) if (consider(b.x, b.y + 40)) best = b;
   for (const a of animals)
-    if (a.hp > 0 && a.tamed && consider(a.x, a.y)) best = a;
+    if (a.hp > 0 && a.tamed && a !== player.mount && consider(a.x, a.y))
+      best = a; // скакун под седлом меню не перехватывает
   if (best) {
     // открываем то же меню, что и ПКМ по объекту
     tryContext(best.x - camX, best.y - 10 - camY);
+  } else if (player.mount) {
+    // E в чистом поле верхом — спешиться
+    const m = player.mount;
+    player.mount = null;
+    addLog("Ты спешился. " + m.name + " идёт рядом.", "#9fd08a");
   }
 }
 
@@ -2794,12 +2922,26 @@ function update(dt) {
     const len = Math.hypot(mx, my);
     player.walk = len > 0;
     if (len > 0) {
-      // верхом скорость даёт зверь; зловоние Великана вяжет ноги
+      // верхом скорость даёт зверь; зловоние Великана вяжет ноги; в болоте вязнешь
       const base = player.mount
         ? Math.max(player.speed, player.mount.speed * 1.15)
         : player.speed;
+      const inSwamp =
+        world.tileAt(Math.floor(player.x / TILE), Math.floor(player.y / TILE)) ===
+        T.SWAMP;
+      if (inSwamp) {
+        player.swampT = (player.swampT || 0) - dt;
+        if (player.swampT <= 0) {
+          player.swampT = 0.9;
+          AudioSys.squelch();
+          burst(player.x, player.y, "#3d4a30", 3, 30, 60, 0.4);
+        }
+      }
       const spd =
-        base * (player.feared > 0 ? 0.45 : 1) * (player.weakT > 0 ? 0.55 : 1);
+        base *
+        (player.feared > 0 ? 0.45 : 1) *
+        (player.weakT > 0 ? 0.55 : 1) *
+        (inSwamp ? 0.45 : 1);
       tryMove(player, (mx / len) * spd * dt, (my / len) * spd * dt);
       if (mx !== 0) player.face = mx > 0 ? 1 : -1;
     }
@@ -3650,8 +3792,9 @@ function updateAnimals(dt) {
     a.cd = Math.max(0, a.cd - dt);
     if (a === player.mount) {
       // зверь под седлом: несёт героя, своей воли не имеет
+      // (y чуть меньше героя — рисуется под ним, герой сидит сверху)
       a.x = player.x;
-      a.y = player.y + 2;
+      a.y = player.y - 3;
       a.face = player.face;
       a.walk = player.walk;
       continue;
@@ -3715,6 +3858,30 @@ function updateAnimals(dt) {
           );
           a.face = gx > a.x ? 1 : -1;
         } else a.walk = false;
+      }
+      // соратник застрял (упёрся и не движется) или совсем потерялся —
+      // прошмыгивает к герою сам: друзей на болоте не бросаем
+      const pd2 = Math.hypot(a.x - player.x, a.y - player.y);
+      if (a.walk && pd2 > 120) {
+        const moved = Math.hypot(a.x - (a.lastX ?? a.x), a.y - (a.lastY ?? a.y));
+        a.stuckT = moved < a.speed * dt * 0.3 ? (a.stuckT || 0) + dt : 0;
+      } else a.stuckT = 0;
+      a.lastX = a.x;
+      a.lastY = a.y;
+      if (a.stuckT > 2.5 || pd2 > 900) {
+        for (let tries = 0; tries < 24; tries++) {
+          const ang = Math.random() * 6.283;
+          const nx = player.x + Math.cos(ang) * (50 + Math.random() * 45);
+          const ny = player.y + Math.sin(ang) * (50 + Math.random() * 45);
+          if (!world.passable(nx, ny)) continue;
+          burst(a.x, a.y, "#9a9a80", 6, 60, 40, 0.5);
+          a.x = nx;
+          a.y = ny;
+          a.stuckT = 0;
+          burst(nx, ny, "#9a9a80", 6, 60, 40, 0.5);
+          floater(nx, ny - 40, a.name + " догнал!", "#9fd08a", 11);
+          break;
+        }
       }
     } else if (a.angry > 0) {
       // разъярённый зверь мстит герою: дракон палит огнём, прочие кусают
@@ -3924,6 +4091,7 @@ const MINI_COLORS = [
   "#8d8d85",
   "#5a5a55",
   "#cbbb87",
+  "#3d4a30",
 ];
 function drawMinimap() {
   const mm = document.getElementById("minimap").getContext("2d");
@@ -4170,10 +4338,30 @@ function getChunk(cx, cy) {
           g.fillStyle = "#6a6a63";
           g.fillRect(px, py, TILE, TILE);
           break;
+        case T.SWAMP: {
+          // болото: бурая жижа, ряска, пузыри
+          g.fillStyle = shade("#3d4a30", v);
+          g.fillRect(px, py, TILE, TILE);
+          g.fillStyle = "rgba(90,110,60,0.5)";
+          for (let k = 0; k < 4; k++) {
+            g.beginPath();
+            g.ellipse(px + rnd() * TILE, py + rnd() * TILE, 4 + rnd() * 5, 2 + rnd() * 2, 0, 0, 6.283);
+            g.fill();
+          }
+          g.fillStyle = "rgba(30,38,24,0.55)";
+          g.beginPath();
+          g.ellipse(px + rnd() * TILE, py + rnd() * TILE, 6 + rnd() * 6, 3.5, 0, 0, 6.283);
+          g.fill();
+          g.fillStyle = "rgba(200,220,180,0.25)";
+          g.beginPath();
+          g.arc(px + rnd() * TILE, py + rnd() * TILE, 1.4, 0, 6.283);
+          g.fill();
+          break;
+        }
       }
       if (level === 2) {
         // Тёмный лес: вся земля тонет в холодном сумраке
-        g.fillStyle = "rgba(14,8,30,0.42)";
+        g.fillStyle = "rgba(14,8,30,0.5)";
         g.fillRect(px, py, TILE, TILE);
       }
     }
@@ -4495,8 +4683,8 @@ function draw() {
       VH / 2,
       VH * 0.9,
     );
-    vg.addColorStop(0, "rgba(8,4,20,0.05)");
-    vg.addColorStop(1, "rgba(4,2,14,0.5)");
+    vg.addColorStop(0, "rgba(8,4,20,0.1)");
+    vg.addColorStop(1, "rgba(3,2,12,0.62)");
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, VW, VH);
   }
@@ -4737,8 +4925,9 @@ function drawGroundItem(it) {
 
 function drawPlayer() {
   humanoid(ctx, gameTime, {
-    x: player.x,
-    y: player.y - (player.mount ? 16 : 0), // верхом герой сидит выше
+    x: player.x + (player.mount ? 3 * player.face : 0),
+    y: player.y - (player.mount ? 20 : 0), // верхом герой сидит на спине зверя
+    riding: !!player.mount,
 
     s: 1.05,
     face: player.face,

@@ -4,7 +4,7 @@
 'use strict';
 const TILE = 40;
 const MAP_W = 60, MAP_H = 60;
-const T = { GRASS: 0, FOREST: 1, WATER: 2, RAVINE: 3, BRIDGE_W: 4, BRIDGE_R: 5, DIRT: 6, STONE: 7, WALL: 8, SAND: 9 };
+const T = { GRASS: 0, FOREST: 1, WATER: 2, RAVINE: 3, BRIDGE_W: 4, BRIDGE_R: 5, DIRT: 6, STONE: 7, WALL: 8, SAND: 9, SWAMP: 10 };
 
 function mulberry32(seed) {
   let a = seed >>> 0;
