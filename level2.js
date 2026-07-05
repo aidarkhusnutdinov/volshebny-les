@@ -31,10 +31,11 @@ Object.assign(ANIMALS, {
 });
 Object.assign(PREDATORS, { bear: 1, tiger: 1, wolverine: 1, tvar: 1 });
 
-// сколько кого бродит по тёмному лесу (белый олень — через переокраску deer)
+// сколько кого бродит по тёмному лесу (белый олень — через переокраску deer);
+// в чаще гнездятся и драконы — приручишь огромного, будет жечь нечисть с неба
 const L2_ANIMAL_COUNTS = {
   horse: 4, bear: 3, gbat: 3, badger: 4, tvar: 2, wolverine: 3, fox: 4,
-  tiger: 2, kikimora: 3, zhopa: 2, deer: 4, wolf: 4,
+  tiger: 2, kikimora: 3, zhopa: 2, deer: 4, wolf: 4, drakonB: 2, drakonH: 2,
 };
 
 // ---------- дикие враги тёмного леса ----------
@@ -56,11 +57,11 @@ const L2_WILD = {
 };
 
 const L2_BOSSES = {
-  shurale: { name: 'Шурале', hp: 550, dmg: 18, speed: 115, weapon: null, xp: 300 },
-  lono: { name: 'Лоно', hp: 480, dmg: 12, speed: 80, weapon: null, xp: 300 },
-  noga: { name: 'БОСАЯ НОГА', hp: 700, dmg: 26, speed: 90, weapon: null, xp: 300 },
-  velikan: { name: 'Великан', hp: 650, dmg: 24, speed: 85, weapon: null, xp: 300 },
-  yama: { name: 'ЯМА', hp: 1000, dmg: 0, speed: 0, weapon: null, xp: 900 },
+  shurale: { name: 'Шурале', hp: 430, dmg: 16, speed: 115, weapon: null, xp: 300 },
+  lono: { name: 'Лоно', hp: 380, dmg: 12, speed: 80, weapon: null, xp: 300 },
+  noga: { name: 'БОСАЯ НОГА', hp: 560, dmg: 22, speed: 90, weapon: null, xp: 300 },
+  velikan: { name: 'Великан', hp: 520, dmg: 20, speed: 85, weapon: null, xp: 300 },
+  yama: { name: 'ЯМА', hp: 850, dmg: 0, speed: 0, weapon: null, xp: 900 },
 };
 
 Object.assign(ENCOUNTER, {
@@ -310,6 +311,7 @@ function newGame2() {
   player.x = world.spawn.x; player.y = world.spawn.y;
   player.pets = []; player.mount = null;
   player.forced = 0; player.feared = 0; player.paralyzed = 0; player.rooted = 0;
+  player.forgeReadyAt = 0; player.sinceHurt = 0; // gameTime начинается заново
   player.bleedT = 0; player.poisonCd = 0; player.rage = 0; player.weakT = 0; player.tickled = 0;
   applyHeroSnap(snap);
 
@@ -317,8 +319,9 @@ function newGame2() {
   camps = world.camps;
 
   // герой приходит прокачанным с первого уровня — нечисть леса растёт под стать
-  // (ур. 11 даёт ×1.8 к здоровью и урону всей нечисти и боссам)
-  const scale = 1 + 0.08 * Math.max(0, player.level - 1);
+  // (ур. 11 даёт ×1.6 к здоровью и урону всей нечисти и боссам);
+  // опыт за убийство растёт тем же множителем — иначе трудные враги не окупались
+  const scale = 1 + 0.06 * Math.max(0, player.level - 1);
   world.l2Scale = scale;
 
   // питомцы первого уровня приходят следом за героем
@@ -336,6 +339,7 @@ function newGame2() {
       ...L2_BOSSES[camp.kind],
       hp: Math.round(L2_BOSSES[camp.kind].hp * scale),
       dmg: Math.round(L2_BOSSES[camp.kind].dmg * scale),
+      xp: Math.round(L2_BOSSES[camp.kind].xp * scale),
     };
     const boss = mkEnemy(camp.kind, camp.x, camp.y - 30, bd, true);
     boss.camp = camp;
@@ -360,7 +364,7 @@ function newGame2() {
           dmg: Math.round(gw.dmg * scale),
           speed: gw.speed,
           weapon: gw.weapon || null,
-          xp: gw.xp,
+          xp: Math.round(gw.xp * scale),
         });
       g.camp = camp;
       if (gk === 'lesnoy') g.lure = true;
@@ -378,7 +382,7 @@ function newGame2() {
     'yama',
     world.pit.x,
     world.pit.y,
-    { ...L2_BOSSES.yama, hp: Math.round(L2_BOSSES.yama.hp * scale) },
+    { ...L2_BOSSES.yama, hp: Math.round(L2_BOSSES.yama.hp * scale), xp: Math.round(L2_BOSSES.yama.xp * scale) },
     true,
   );
   yamaRef.invuln = true;
@@ -412,7 +416,7 @@ function newGame2() {
           hp: Math.round(wd.hp * scale),
           dmg: Math.round(wd.dmg * scale),
           speed: wd.speed,
-          weapon: wd.weapon || null, xp: wd.xp,
+          weapon: wd.weapon || null, xp: Math.round(wd.xp * scale),
         });
         e.wild = true;
         e.wanderT = rnd() * 4;
@@ -486,7 +490,13 @@ function mkL2Animal(sp, x, y, rnd) {
     dir: rnd() * 6.283, tamed: false, tameBonus: 0, scared: 0, cd: 0,
     maxHp: ANIMALS[sp].hp, homeX: x, homeY: y,
   };
-  a.tame *= 0.55; // тёмный лес: зверьё пуганое, доверие даётся трудно
+  // зверьё тёмного леса растёт под стать нечисти (и чуть крепче —
+  // иначе соратники мёрли от пары ударов раскачанных врагов)
+  const sc = world.l2Scale || 1;
+  a.maxHp = a.hp = Math.round(ANIMALS[sp].hp * sc * 1.25);
+  a.dmg = Math.round(ANIMALS[sp].dmg * sc);
+  if (!sp.startsWith('drakon'))
+    a.tame *= 0.55; // тёмный лес: зверьё пуганое, доверие даётся трудно (драконам тут дом)
   if (sp === 'deer') {
     // в тёмном лесу олени белые — как призраки
     a.name = 'Белый олень';
@@ -520,10 +530,10 @@ const L2AI = {
         const kind = r < 0.45 ? 'zombie' : r < 0.75 ? 'ruka' : 'golova';
         const sc = world.l2Scale || 1;
         const stats = kind === 'zombie'
-          ? { name: 'Зелёный мертвец', hp: Math.round(60 * sc), dmg: Math.round(11 * sc), speed: 95, xp: 20 }
+          ? { name: 'Зелёный мертвец', hp: Math.round(60 * sc), dmg: Math.round(11 * sc), speed: 95, xp: Math.round(20 * sc) }
           : kind === 'ruka'
-            ? { name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: 10 }
-            : { name: 'Мёртвая голова', hp: Math.round(35 * sc), dmg: Math.round(9 * sc), speed: 160, xp: 15 };
+            ? { name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: Math.round(10 * sc) }
+            : { name: 'Мёртвая голова', hp: Math.round(35 * sc), dmg: Math.round(9 * sc), speed: 160, xp: Math.round(15 * sc) };
         const ang = Math.random() * 6.283;
         const sp = mkEnemy(kind, e.x + Math.cos(ang) * (e.r + 20), e.y + Math.sin(ang) * (e.r * 0.5 + 20), stats);
         sp.fromYama = true;
@@ -803,7 +813,7 @@ function l2Quake() {
   if (placed && Math.random() < 0.65) {
     const sc = world.l2Scale || 1;
     const e = mkEnemy('ruka', sx2, sy2, {
-      name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: 10,
+      name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: Math.round(10 * sc),
     });
     e.fromYama = true;
     enemies.push(e);

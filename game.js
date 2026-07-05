@@ -829,7 +829,8 @@ function gainXP(n, x, y) {
   while (player.xp >= player.xpNeed) {
     player.xp -= player.xpNeed;
     player.level++;
-    player.xpNeed = Math.round(110 * Math.pow(1.25, player.level - 1));
+    // 1.25 в степени уровня делал 10+ уровни бесконечной гриндой — смягчено
+    player.xpNeed = Math.round(110 * Math.pow(1.22, player.level - 1));
     player.maxHp += 18;
     player.hp = player.maxHp;
     player.speed = Math.min(255, player.speed + 7);
@@ -881,7 +882,20 @@ function hurtPlayer(dmg, srcX, srcY) {
     floater(player.x, player.y - 55, "увернулся!", "#a0e8ff", 13);
     return;
   }
+  // верхом скакун грудью принимает треть ударов на себя
+  if (player.mount && player.mount.hp > 0 && Math.random() < 0.35) {
+    floater(
+      player.mount.x,
+      player.mount.y - 34,
+      player.mount.name + " принял удар!",
+      "#9fd08a",
+      12,
+    );
+    hurtPet(player.mount, dmg);
+    return;
+  }
   player.hp -= dmg;
+  player.sinceHurt = 0;
   player.hurtT = 0.25;
   shake = Math.max(shake, 6);
   AudioSys.playerHurt();
@@ -1131,7 +1145,9 @@ function playerAttack(tx, ty) {
         if (player.mount && !e.dead && player.mount.hp > 0) {
           hurtEnemy(
             e,
-            player.mount.dmg * (0.85 + Math.random() * 0.3),
+            player.mount.dmg *
+              (0.85 + Math.random() * 0.3) *
+              (player.mount.inspiredT > 0 ? 1.3 : 1),
             true,
           );
         }
@@ -1191,7 +1207,7 @@ function playerAttack(tx, ty) {
       burst(tr.x, tr.y - 40, "#94c25a", 4, 60);
       tr.chops = (tr.chops || 0) + 1;
       if (tr.chops >= 3) {
-        tr.alive = false;
+        fellTree(tr);
         player.wood++;
         setTimeout(() => AudioSys.treeFall(), 250);
         burst(tr.x, tr.y - 30, "#94c25a", 14, 100);
@@ -1202,6 +1218,13 @@ function playerAttack(tx, ty) {
       break;
     }
   }
+}
+
+// срубленное дерево оставляет пень-предмет: на нём отдыхают, по нему стучат, его можно разнести
+function fellTree(tr) {
+  const i = world.trees.indexOf(tr);
+  if (i >= 0) world.trees.splice(i, 1);
+  world.props.push({ type: "stump", x: tr.x, y: tr.y, used: false });
 }
 
 // разбить предмет ударом; возвращает true, если удар пришёлся по предмету
@@ -1774,6 +1797,13 @@ function animalMenu(a, cx, cy) {
                         "Ты в седле! " + a.name + " несёт быстрее ветра — и бьётесь вы теперь вдвоём.",
                         "#9fd08a",
                       );
+                      if (!hintsShown.mountwhy)
+                        hintOnce(
+                          "mountwhy",
+                          "Верхом: мчишь со скоростью зверя, при каждом твоём ударе он кусает ту же цель, на бегу топчет встречных врагов и грудью принимает треть ударов на себя.",
+                          "",
+                          "#9fd08a",
+                        );
                     },
                   },
             ]
@@ -1908,7 +1938,7 @@ function treeMenu(tr, cx, cy) {
       {
         label: "🪓 Срубить",
         fn: () => {
-          tr.alive = false;
+          fellTree(tr);
           player.wood++;
           AudioSys.chop();
           setTimeout(() => AudioSys.treeFall(), 250);
@@ -2337,9 +2367,12 @@ function propMenu(p, cx, cy) {
         {
           label: "⚒ Ковать оружие (бревно)",
           fn: () => {
-            if (player.forged >= 3)
+            // ковать можно сколько угодно, но металл должен остыть — 30 секунд между закалками
+            if (gameTime < (player.forgeReadyAt || 0))
               return addLog(
-                "Оружие прокалено трижды — больше металл не возьмёт.",
+                "Металл ещё не остыл — жди ещё " +
+                  Math.ceil(player.forgeReadyAt - gameTime) +
+                  " с.",
                 "#cbb87f",
               );
             if (!player.wood)
@@ -2349,14 +2382,15 @@ function propMenu(p, cx, cy) {
               );
             player.wood--;
             player.forged++;
+            player.forgeReadyAt = gameTime + 30;
             AudioSys.hitMetal();
             setTimeout(() => AudioSys.hitMetal(), 220);
             setTimeout(() => AudioSys.hitMetal(), 440);
             burst(p.x, p.y - 20, "#ffd76e", 14, 120);
             announce(
-              "⚒ Оружие проковано на углях! Урон +25% (закалка " +
+              "⚒ Оружие проковано на углях! Урон +25% (закалка ×" +
                 player.forged +
-                "/3).",
+                ").",
               "#ffd76e",
             );
           },
@@ -2623,6 +2657,32 @@ function petAnimal(a) {
   hearts(a.x, a.y, 5);
   if (a.sp === "zhopa") AudioSys.zhopa();
   else AudioSys.pet();
+  if (a.tamed) {
+    // ласка соратнику не пустяк: лечит и воодушевляет — полминуты бьёт на треть сильнее
+    if (gameTime >= (a.petReadyAt || 0)) {
+      a.petReadyAt = gameTime + 8;
+      a.hp = Math.min(a.maxHp, a.hp + 15);
+      a.inspiredT = 30;
+      floater(
+        a.x,
+        a.y - 55 * (a.s || 1),
+        "воодушевлён! +15 здоровья, урон +30%",
+        "#9fd08a",
+        13,
+      );
+      hintOnce(
+        "petbuff",
+        a.name +
+          " воодушевлён лаской: раны подлечены, полминуты бьёт на треть сильнее. Гладь друзей перед боем!",
+        a.name + " воодушевлён лаской.",
+        "#8fd06a",
+      );
+    } else {
+      addLog(a.name + " и так доволен — дай отдышаться.", "#cbb87f");
+    }
+    gainXP(2);
+    return;
+  }
   a.tameBonus = Math.min(0.45, a.tameBonus + 0.15);
   const lines = {
     zhopa: "Жопа с ушами блаженно хлопает ушами.",
@@ -2890,8 +2950,8 @@ function interact() {
   // E — универсальная: открывает меню ближайшего объекта (гриб, изба, костёр...)
   let best = null,
     bd = 110;
-  const consider = (x, y) => {
-    const d = Math.hypot(x - player.x, y - player.y);
+  const consider = (x, y, pen = 0) => {
+    const d = Math.hypot(x - player.x, y - player.y) + pen;
     if (d < bd) {
       bd = d;
       return true;
@@ -2909,7 +2969,9 @@ function interact() {
       best = tr; // дерево — только если оно прямо под рукой
   for (const b of world.buildings) if (consider(b.x, b.y + 40)) best = b;
   for (const a of animals)
-    if (a.hp > 0 && a.tamed && a !== player.mount && consider(a.x, a.y))
+    // свой зверь ходит за героем по пятам — без штрафа он перехватывал бы E
+    // у любого дерева или гриба; берём его, лишь когда вокруг пусто
+    if (a.hp > 0 && a.tamed && a !== player.mount && consider(a.x, a.y, 45))
       best = a; // скакун под седлом меню не перехватывает
   if (best) {
     // открываем то же меню, что и ПКМ по объекту
@@ -2954,6 +3016,7 @@ function unstickPlayer() {
 function directDamage(n, color, label) {
   if (gameOver || victory) return;
   player.hp -= n;
+  player.sinceHurt = 0;
   player.hurtT = Math.max(player.hurtT, 0.12);
   floater(
     player.x + (Math.random() - 0.5) * 16,
@@ -3087,6 +3150,21 @@ function update(dt) {
     }
   }
   player.weakT = Math.max(0, player.weakT - dt);
+  // раны затягиваются сами, когда бой стих (6 с без ударов) —
+  // не нужно уныло бродить и выискивать ягоды после каждой сшибки
+  player.sinceHurt = (player.sinceHurt || 0) + dt;
+  if (player.sinceHurt > 6 && player.hp > 0 && player.hp < player.maxHp) {
+    player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt);
+    if (Math.random() < dt * 0.8)
+      burst(player.x, player.y - 24, "#8fd06a", 1, 22, -60, 0.5);
+    if (!hintsShown.regen)
+      hintOnce(
+        "regen",
+        "Раны затягиваются сами, когда рядом нет сечи. Еда и родники лечат быстрее.",
+        "",
+        "#8fd06a",
+      );
+  }
   // верхом: зверь несёт седока, а встречных врагов расталкивает грудью
   if (player.mount) {
     const m = player.mount;
@@ -3931,6 +4009,7 @@ function updateAnimals(dt) {
       continue;
     }
     a.cd = Math.max(0, a.cd - dt);
+    if (a.inspiredT) a.inspiredT = Math.max(0, a.inspiredT - dt);
     if (a === player.mount) {
       // зверь под седлом: несёт героя, своей воли не имеет
       // (y чуть меньше героя — рисуется под ним, герой сидит сверху)
@@ -3938,6 +4017,7 @@ function updateAnimals(dt) {
       a.y = player.y - 3;
       a.face = player.face;
       a.walk = player.walk;
+      a.hp = Math.min(a.maxHp, a.hp + 1.5 * dt); // в седле зверь дух переводит
       continue;
     }
     if (a.tamed) {
@@ -3972,7 +4052,13 @@ function updateAnimals(dt) {
           a.walk = false;
           if (a.cd <= 0) {
             a.cd = 1;
-            hurtEnemy(target, a.dmg * (0.85 + Math.random() * 0.3), true);
+            hurtEnemy(
+              target,
+              a.dmg *
+                (0.85 + Math.random() * 0.3) *
+                (a.inspiredT > 0 ? 1.3 : 1),
+              true,
+            );
             // повадки зверей Тёмного леса
             if (a.sp === "tiger" && !target.dead) {
               target.bleedT = Math.max(target.bleedT || 0, 3);
@@ -3985,6 +4071,8 @@ function updateAnimals(dt) {
           }
         }
       } else {
+        // врагов рядом нет — соратник зализывает раны
+        a.hp = Math.min(a.maxHp, a.hp + 3 * dt);
         const idx = player.pets.indexOf(a);
         const ang = 2.6 + idx * 0.9;
         const gx = player.x + Math.cos(ang) * 60,
