@@ -23,25 +23,12 @@
     player.mount = null;
   }
 
-  function giveEscort() {
-    ['horse', 'bear', 'tiger', 'wolf'].forEach((sp, i) => {
-      const ang = (i / 4) * Math.PI * 2;
-      const a = mkL2Animal(sp, player.x + Math.cos(ang) * 90, player.y + Math.sin(ang) * 90, world.rnd);
-      a.tamed = true;
-      a.tameBonus = 1;
-      a.homeX = player.x;
-      a.homeY = player.y;
-      animals.push(a);
-      player.pets.push(a);
-    });
-  }
-
   function setupTest() {
     boostPlayer();
     l2HeroSnap = null; // снапшот пересоберётся из прокачанного героя
     startLevel2();
-    giveEscort();
-    addLog('[ТЕСТ] Тёмный лес: герой на ' + LEVEL + ' уровне, конь и медведь ждут седока.', '#9fd08a');
+    // зверей не даём — как в настоящей игре: приручай лесных (конь/медведь — под седло)
+    addLog('[ТЕСТ] Тёмный лес: герой на ' + LEVEL + ' уровне, зверей приручай сам.', '#9fd08a');
   }
 
   // «В ПУТЬ» (и после смерти, и после победы) всегда пересоздаёт тестовый лес

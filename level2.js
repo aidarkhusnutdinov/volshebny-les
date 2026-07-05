@@ -299,6 +299,11 @@ function newGame2() {
   const rnd = world.rnd;
   camps = world.camps;
 
+  // герой приходит прокачанным с первого уровня — нечисть леса растёт под стать
+  // (ур. 11 даёт ×1.8 к здоровью и урону всей нечисти и боссам)
+  const scale = 1 + 0.08 * Math.max(0, player.level - 1);
+  world.l2Scale = scale;
+
   // питомцы первого уровня приходят следом за героем
   snap.pets.forEach((sp, i) => {
     if (!ANIMALS[sp]) return;
@@ -310,7 +315,11 @@ function newGame2() {
 
   // --- боссы в логовах ---
   for (const camp of camps) {
-    const bd = L2_BOSSES[camp.kind];
+    const bd = {
+      ...L2_BOSSES[camp.kind],
+      hp: Math.round(L2_BOSSES[camp.kind].hp * scale),
+      dmg: Math.round(L2_BOSSES[camp.kind].dmg * scale),
+    };
     const boss = mkEnemy(camp.kind, camp.x, camp.y - 30, bd, true);
     boss.camp = camp;
     if (camp.kind === 'noga') boss.barOy = 112;
@@ -324,7 +333,13 @@ function newGame2() {
   }
 
   // --- ЯМА (спит, пока живы четыре босса) ---
-  yamaRef = mkEnemy('yama', world.pit.x, world.pit.y, L2_BOSSES.yama, true);
+  yamaRef = mkEnemy(
+    'yama',
+    world.pit.x,
+    world.pit.y,
+    { ...L2_BOSSES.yama, hp: Math.round(L2_BOSSES.yama.hp * scale) },
+    true,
+  );
   yamaRef.invuln = true;
   yamaRef.invulnMsg = 'ЯМА СПИТ — сначала одолей четырёх хозяев леса';
   yamaRef.r = world.pit.r;
@@ -352,7 +367,10 @@ function newGame2() {
           if (!shore) continue;
         }
         const e = mkEnemy(kind === 'lesnoy' ? 'bandit' : kind, x, y, {
-          name: wd.name, hp: wd.hp, dmg: wd.dmg, speed: wd.speed,
+          name: wd.name,
+          hp: Math.round(wd.hp * scale),
+          dmg: Math.round(wd.dmg * scale),
+          speed: wd.speed,
           weapon: wd.weapon || null, xp: wd.xp,
         });
         e.wild = true;
@@ -439,12 +457,14 @@ function mkL2Animal(sp, x, y, rnd) {
 const L2AI = {
   yama(e, target, td, pd, dt) {
     e.walk = false;
-    // пугающие стоны из глубины
+    // голоса из глубины: чем ближе подходишь, тем громче и чаще
     e.groanT -= dt;
-    if (e.groanT <= 0 && pd < 800) {
-      e.groanT = 5 + Math.random() * 6;
-      AudioSys.zombiePull();
-      floater(e.x, e.y - 30, 'из ямы доносятся стоны...', '#c9a0e8', 12);
+    if (e.groanT <= 0 && pd < 1100) {
+      const near = 1 - pd / 1100; // 0 — на пределе слышимости, 1 — у края
+      e.groanT = 4 + Math.random() * 5 + (1 - near) * 5;
+      AudioSys.yamaVoice(0.2 + near * 0.8);
+      if (pd < 500)
+        floater(e.x, e.y - 30, 'из ямы доносятся стоны...', '#c9a0e8', 12);
     }
     // изрыгает нечисть: спящая — изредка, пробуждённая — постоянно
     e.spawnT -= dt;
@@ -455,11 +475,12 @@ const L2AI = {
       if (alive < cap) {
         const r = Math.random();
         const kind = r < 0.45 ? 'zombie' : r < 0.75 ? 'ruka' : 'golova';
+        const sc = world.l2Scale || 1;
         const stats = kind === 'zombie'
-          ? { name: 'Зелёный мертвец', hp: 60, dmg: 11, speed: 95, xp: 20 }
+          ? { name: 'Зелёный мертвец', hp: Math.round(60 * sc), dmg: Math.round(11 * sc), speed: 95, xp: 20 }
           : kind === 'ruka'
-            ? { name: 'Отрубленная рука', hp: 25, dmg: 7, speed: 175, xp: 10 }
-            : { name: 'Мёртвая голова', hp: 35, dmg: 9, speed: 160, xp: 15 };
+            ? { name: 'Отрубленная рука', hp: Math.round(25 * sc), dmg: Math.round(7 * sc), speed: 175, xp: 10 }
+            : { name: 'Мёртвая голова', hp: Math.round(35 * sc), dmg: Math.round(9 * sc), speed: 160, xp: 15 };
         const ang = Math.random() * 6.283;
         const sp = mkEnemy(kind, e.x + Math.cos(ang) * (e.r + 20), e.y + Math.sin(ang) * (e.r * 0.5 + 20), stats);
         sp.fromYama = true;
@@ -665,7 +686,7 @@ const L2AI = {
       player.paralyzed = Math.max(player.paralyzed, 1.4);
       player.tickled = 1.4;
       AudioSys.purr();
-      directDamage(14, '#ff9dc9', 'щекотка');
+      directDamage(Math.round(14 * (world.l2Scale || 1)), '#ff9dc9', 'щекотка');
       announce('Шурале ЩЕКОЧЕТ длинными пальцами! Не вырваться!', '#ff9dc9');
     }
     return false;
@@ -673,7 +694,7 @@ const L2AI = {
   lono(e, target, td, pd, dt) {
     if (e.spCd <= 0 && td < 430) {
       e.spCd = 4.2;
-      l2Waves.push({ x: e.x, y: e.y - 14, r: 16, dmg: 16, hit: new Set() });
+      l2Waves.push({ x: e.x, y: e.y - 14, r: 16, dmg: Math.round(16 * (world.l2Scale || 1)), hit: new Set() });
       AudioSys.paralyze();
       floater(e.x, e.y - 70, 'ВОЕТ!', '#c23bd6', 15);
     }
@@ -687,18 +708,17 @@ const L2AI = {
       shake = 15;
       addLog('БОСАЯ НОГА ТОПАЕТ — земля ходит ходуном!', '#ff9d7a');
       burst(e.x, e.y, '#6b4a1e', 22, 150);
-      if (Math.hypot(player.x - e.x, player.y - e.y) < 190) hurtPlayer(24, e.x, e.y);
+      if (Math.hypot(player.x - e.x, player.y - e.y) < 190) hurtPlayer(e.dmg, e.x, e.y);
       for (const pet of player.pets)
         if (pet.hp > 0 && Math.hypot(pet.x - e.x, pet.y - e.y) < 190)
-          hurtPet(pet, (pet.s || 1) < 1 ? 90 : 30); // мелких зверей затаптывает разом
+          hurtPet(pet, (pet.s || 1) < 1 ? 200 : e.dmg + 6); // мелких зверей затаптывает разом
     }
     return false;
   },
   velikan(e, target, td, pd, dt) {
     if (e.spCd <= 0 && td < 280) {
       e.spCd = 8;
-      AudioSys.squelch();
-      AudioSys.wind();
+      AudioSys.fart();
       pools.push({ x: e.x, y: e.y, r: 150, t: 6, max: 6, kind: 'fart' });
       burst(e.x, e.y - 30, '#7a9a3d', 24, 120, 20, 1.4);
       announce('Великан ИСПОРТИЛ ВОЗДУХ — зловоние валит с ног!', '#7a9a3d');

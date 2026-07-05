@@ -2970,8 +2970,19 @@ function update(dt) {
   // атмосфера — редкие тихие птицы и ветер, чтобы не раздражали
   birdTimer -= dt;
   if (birdTimer <= 0) {
-    birdTimer = 14 + Math.random() * 20;
-    AudioSys.birds();
+    if (level === 2) {
+      // в Тёмном лесу птицы не поют — шепоты, уханье, всхлипы, визги и смех
+      birdTimer = 9 + Math.random() * 14;
+      const r = Math.random();
+      if (r < 0.28) AudioSys.whisper();
+      else if (r < 0.5) AudioSys.owl();
+      else if (r < 0.68) AudioSys.sob();
+      else if (r < 0.86) AudioSys.shriek();
+      else AudioSys.evilLaugh();
+    } else {
+      birdTimer = 14 + Math.random() * 20;
+      AudioSys.birds();
+    }
   }
   windTimer -= dt;
   if (windTimer <= 0) {
