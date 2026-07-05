@@ -347,6 +347,7 @@ function newGame2() {
   player.pets = []; player.mount = null;
   player.forced = 0; player.feared = 0; player.paralyzed = 0; player.rooted = 0;
   player.forgeReadyAt = 0; player.sinceHurt = 0; // gameTime начинается заново
+  player.restedAt = -999; player.fishAt = -999; player.wordAt = 0; // и таймеры отдыха с ним
   player.bleedT = 0; player.poisonCd = 0; player.rage = 0; player.weakT = 0; player.tickled = 0;
   applyHeroSnap(snap);
 

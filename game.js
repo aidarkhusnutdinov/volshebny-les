@@ -844,6 +844,22 @@ function gainXP(n, x, y) {
   }
 }
 
+// мелкие «отдыхательные» лечения (пень, колодец, река, камень, костёр...) —
+// общий отдых не чаще раза в полминуты, иначе любую из них можно доить бесконечно
+function restHeal(n, msg) {
+  if (gameTime - (player.restedAt ?? -999) < 30) {
+    addLog(
+      "Ты только что передохнул — рано ещё. Раны и сами затянутся.",
+      "#cbb87f",
+    );
+    return false;
+  }
+  player.restedAt = gameTime;
+  healPlayer(n);
+  addLog(msg, "#8fd06a");
+  return true;
+}
+
 // смекалка: повышает шанс приручения и удачу (грибы, рыбалка, клады, пчёлы)
 function gainSmek(n, msg) {
   player.smek += n;
@@ -1493,8 +1509,12 @@ function customWord(word, target, title) {
       "«" + word + "»? Такого и в былинах не писали.",
     ];
     addLog(resp[Math.floor(Math.random() * resp.length)], "#cbb87f");
-    gainXP(1);
-    gainSmek(1); // выдумка — мать смекалки
+    // выдумка — мать смекалки, но доить её той же скороговоркой нельзя
+    if (rewardOk) {
+      player.wordAt = gameTime;
+      gainXP(1);
+      gainSmek(1);
+    }
   }
 }
 
@@ -1590,6 +1610,11 @@ function tryContext(clientX, clientY, skipMount) {
             {
               label: "👁 Осмотреть пепелище",
               fn: () => {
+                if (b.mournedBy) {
+                  addLog("Ты уже поклялся отомстить за этот дом.", "#cbb87f");
+                  return;
+                }
+                b.mournedBy = true;
                 addLog(
                   "Здесь жили люди... Ярость закипает в груди (+1% силы).",
                   "#ff9d7a",
@@ -1680,14 +1705,20 @@ function tryContext(clientX, clientY, skipMount) {
         {
           label: "💧 Испить воды",
           fn: () => {
-            healPlayer(10);
-            AudioSys.splash();
-            addLog("Студёная водица (+10 здоровья).", "#8fd06a");
+            if (restHeal(10, "Студёная водица (+10 здоровья)."))
+              AudioSys.splash();
           },
         },
         {
           label: "🐟 Порыбачить",
           fn: () => {
+            // клёв не мгновенный — щуку за щукой из реки не выдёргивать
+            if (gameTime - (player.fishAt ?? -999) < 15)
+              return addLog(
+                "Распугал всю рыбу — подожди, пока клёв вернётся.",
+                "#cbb87f",
+              );
+            player.fishAt = gameTime;
             AudioSys.splash();
             if (Math.random() < 0.5 + player.smek * 0.02) {
               player.items.fish++;
@@ -1728,8 +1759,12 @@ function tryContext(clientX, clientY, skipMount) {
       {
         label: "✋ Взять горсть земли",
         fn: () => {
-          addLog("Горсть родной земли — за пазуху. Оберег.", "#8fd06a");
-          gainXP(2);
+          if (!player.earthTaken) {
+            player.earthTaken = true;
+            addLog("Горсть родной земли — за пазуху. Оберег.", "#8fd06a");
+            gainXP(2);
+          } else
+            addLog("Оберег уже за пазухой — одной горсти довольно.", "#cbb87f");
         },
       },
     ];
@@ -1996,17 +2031,20 @@ function treeMenu(tr, cx, cy) {
           burst(tr.x, tr.y - 40, "#7db3d6", 8, 50, -40);
           AudioSys.splash();
           addLog(tname + " напоена — листва заблестела.", "#8fd06a");
-          gainXP(2);
+          // опыт — за первую поливку дерева, дальше это просто забота
+          if (!tr.wateredXp) {
+            tr.wateredXp = true;
+            gainXP(2);
+          }
         },
       },
       {
         label: "🤗 Обнять",
         fn: () => {
           hearts(tr.x, tr.y - 30);
-          healPlayer(3);
-          addLog(
+          restHeal(
+            3,
             "Обнял " + tname.toLowerCase() + "у. Русь-матушка сил даёт (+3).",
-            "#8fd06a",
           );
         },
       },
@@ -2036,8 +2074,7 @@ function propMenu(p, cx, cy) {
         {
           label: "🪑 Присесть",
           fn: () => {
-            healPlayer(8);
-            addLog("Посидел на камушке, дух перевёл (+8).", "#8fd06a");
+            restHeal(8, "Посидел на камушке, дух перевёл (+8).");
           },
         },
       ],
@@ -2201,8 +2238,7 @@ function propMenu(p, cx, cy) {
           label: "👃 Понюхать",
           fn: () => {
             hearts(p.x, p.y, 3);
-            healPlayer(2);
-            addLog("Пахнет летом и мёдом (+2).", "#8fd06a");
+            restHeal(2, "Пахнет летом и мёдом (+2).");
           },
         },
         {
@@ -2250,9 +2286,8 @@ function propMenu(p, cx, cy) {
         {
           label: "🫧 Умыться",
           fn: () => {
-            AudioSys.splash();
-            healPlayer(5);
-            addLog("Студёная родниковая вода бодрит (+5).", "#8fd06a");
+            if (restHeal(5, "Студёная родниковая вода бодрит (+5)."))
+              AudioSys.splash();
           },
         },
       ],
@@ -2301,15 +2336,16 @@ function propMenu(p, cx, cy) {
         {
           label: "🪑 Присесть отдохнуть",
           fn: () => {
-            healPlayer(15);
-            addLog("Отдохнул на пеньке (+15).", "#8fd06a");
+            restHeal(15, "Отдохнул на пеньке (+15).");
           },
         },
         {
           label: "✊ Постучать по пню",
           fn: () => {
             AudioSys.chop();
-            if (Math.random() < 0.3) {
+            // кикимора живёт под пнём одна — бесконечно их не настучишь
+            if (!p.knocked && Math.random() < 0.3) {
+              p.knocked = true;
               addLog("Из-под пня выскочила кикимора!", "#c9a0e8");
               animals.push({
                 sp: "kikimora",
@@ -2340,17 +2376,19 @@ function propMenu(p, cx, cy) {
         {
           label: "💧 Испить",
           fn: () => {
-            healPlayer(25);
-            AudioSys.splash();
-            addLog("Колодезная вода — что живая (+25)!", "#8fd06a");
+            if (restHeal(25, "Колодезная вода — что живая (+25)!"))
+              AudioSys.splash();
           },
         },
         {
           label: "🪙 Бросить монетку",
           fn: () => {
             AudioSys.splash();
-            addLog("Дзынь... буль. На удачу.");
-            gainXP(3);
+            if (!p.coined) {
+              p.coined = true;
+              addLog("Дзынь... буль. На удачу.");
+              gainXP(3);
+            } else addLog("Дно уже блестит от твоих монет.", "#cbb87f");
           },
         },
       ],
@@ -2375,11 +2413,7 @@ function propMenu(p, cx, cy) {
         {
           label: "🔥 Погреться",
           fn: () => {
-            if (p.warmedAt && gameTime - p.warmedAt < 30)
-              return addLog("Ты уже согрелся. Посиди, но сил больше не прибудет.", "#cbb87f");
-            p.warmedAt = gameTime;
-            healPlayer(6);
-            addLog("Тепло... (+6)", "#8fd06a");
+            restHeal(6, "Тепло... (+6)");
           },
         },
         {
@@ -2725,12 +2759,14 @@ function petAnimal(a) {
         a.name + " воодушевлён лаской.",
         "#8fd06a",
       );
+      gainXP(2);
     } else {
       addLog(a.name + " и так доволен — дай отдышаться.", "#cbb87f");
     }
-    gainXP(2);
     return;
   }
+  // опыт капает, лишь пока доверие реально растёт — гладить до одури без толку
+  const trustGrew = a.tameBonus < 0.45;
   a.tameBonus = Math.min(0.45, a.tameBonus + 0.15);
   const lines = {
     zhopa: "Жопа с ушами блаженно хлопает ушами.",
@@ -2749,7 +2785,7 @@ function petAnimal(a) {
       "#9fd08a",
       13,
     );
-  gainXP(2);
+  if (trustGrew) gainXP(2);
 }
 function tameAnimal(a) {
   if (a.grudge) {
