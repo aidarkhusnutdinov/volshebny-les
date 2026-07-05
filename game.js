@@ -362,12 +362,15 @@ let pools = []; // отравленные лужи говённого челов
 let alarmOn = false,
   gateHintT = 0; // тревога в замке и напоминание о запертых вратах
 let kalinAlerted = false; // раз включившись при входе в замок, держится до смерти Калина
-// смерть Калина: цепочка взрывов на его месте + крупная надпись в центре экрана
+// смерть Калина/Ямы: цепочка взрывов на месте + крупная надпись в центре экрана
 let kalinBoomT = 0,
   kalinBoomTick = 0,
   kalinBannerT = 0,
   kalinBoomX = 0,
-  kalinBoomY = 0;
+  kalinBoomY = 0,
+  kalinBannerText = "",
+  kalinBannerSub = "";
+let level = 1; // 1 — Русь, 2 — Тёмный лес (level2.js)
 let metKinds; // какие виды врагов уже встречены (для подписи при первой встрече)
 let playerName = localStorage.getItem("bogatyr_name") || "Добрыня";
 const keys = {};
@@ -462,6 +465,7 @@ function hearts(x, y, n = 5) {
 
 // ---------- создание мира ----------
 function newGame() {
+  level = 1;
   world = generateWorld((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   enemies = [];
   animals = [];
@@ -517,6 +521,10 @@ function newGame() {
     bleedT: 0,
     bleedTick: 0,
     poisonCd: 0,
+    forged: 0, // ковка у костра: +25% урона оружия за раз, до трёх раз
+    weakT: 0, // зловоние Великана: слабость
+    tickled: 0, // щекотка Шурале
+    mount: null, // зверь под седлом (конь/медведь)
   };
   metKinds = new Set();
   document.getElementById("heroName").textContent = "Богатырь " + playerName;
@@ -810,6 +818,7 @@ function gainSmek(n, msg) {
 }
 
 function updateObjective() {
+  if (level === 2 && typeof l2Objective === "function") return l2Objective();
   const bossesLeft = enemies
     ? enemies.filter((e) => e.isBoss && e.kind !== "kalin" && !e.dead).length
     : 4;
@@ -862,6 +871,12 @@ function hurtEnemy(e, dmg, fromPet) {
     AudioSys.hitMetal();
     return;
   }
+  if (e.invuln) {
+    // спящая ЯМА и прочее временно неуязвимое
+    floater(e.x, e.y - 70, e.invulnMsg || "НЕУЯЗВИМО", "#c9a0e8", 13);
+    AudioSys.hitMetal();
+    return;
+  }
   e.hp -= dmg;
   e.hurtT = 0.18;
   floater(
@@ -880,7 +895,12 @@ function killEnemy(e) {
   e.dead = true;
   burst(e.x, e.y, "#c23b30", 14, 110);
   burst(e.x, e.y, "#3d3128", 8, 60);
-  if (e.kind === "kalin") {
+  // на втором уровне боссы и ЯМА объявляют смерть по-своему
+  const l2Handled =
+    level === 2 && typeof l2OnKill === "function" && l2OnKill(e);
+  if (l2Handled) {
+    // xp, оружие и задание — как у всех
+  } else if (e.kind === "kalin") {
     kalinDead = true;
     alarmOn = false;
     AudioSys.alarmStop(); // тревога смолкает...
@@ -894,6 +914,8 @@ function killEnemy(e) {
     kalinBoomT = 1.5;
     kalinBoomTick = 0;
     kalinBannerT = 4.2;
+    kalinBannerText = "☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН!";
+    kalinBannerSub = "Земля вздохнула свободно";
     burst(e.x, e.y - 20, "#ffd76e", 40, 260, 60, 1.2);
     burst(e.x, e.y - 20, "#ff6a30", 30, 210, 60, 1.0);
     burst(e.x, e.y - 20, "#c23bd6", 22, 160, 60, 1.4);
@@ -947,6 +969,7 @@ function campCleared(camp) {
 
 function checkVictory() {
   if (kalinBannerT > 0) return; // сначала взрыв и надпись в центре, потом победный экран
+  if (level === 2) return; // победу в Тёмном лесу объявляет l2Victory (level2.js)
   if (!victory && kalinDead && freedHostages === totalHostages) {
     victory = true;
     running = false;
@@ -958,12 +981,14 @@ function checkVictory() {
         "Гусляры сложат песни о подвиге " +
         playerName +
         ", а берёзы будут шуметь о нём века.</p>" +
+        "<p>Но с полуночи тянет гнилью: за оврагами чернеет ТЁМНЫЙ ЛЕС, " +
+        "и оттуда не вернулся ещё ни один. Богатырская дорога зовёт дальше.</p>" +
         '<p style="text-align:center;color:#ffd76e">Уровень ' +
         player.level +
         " · соратников: " +
         player.pets.length +
         "</p>",
-      "НОВЫЙ ПОХОД",
+      "В ТЁМНЫЙ ЛЕС",
     );
   }
 }
@@ -1011,7 +1036,13 @@ function startGame() {
   }
   document.getElementById("overlay").style.display = "none";
   AudioSys.init();
-  if (gameOver || victory || !world) newGame();
+  if (victory && level === 1 && typeof startLevel2 === "function") {
+    startLevel2(); // Русь освобождена — дальше Тёмный лес
+  } else if (gameOver && level === 2 && typeof restartLevel2 === "function") {
+    restartLevel2(); // пал в лесу — восстаёт у его кромки, каким вошёл
+  } else if (gameOver || victory || !world) {
+    newGame();
+  }
   document.getElementById("heroName").textContent = "Богатырь " + playerName;
   running = true;
 }
@@ -1047,7 +1078,8 @@ function playerAttack(tx, ty) {
   for (const e of enemies) {
     if (e.dead) continue;
     const d = Math.hypot(e.x - player.x, e.y - player.y);
-    if (d < wp.range + 14) {
+    if (d < wp.range + 14 + (e.r || 0)) {
+      // у ЯМЫ e.r — бьём её, стоя у края
       if (wallBetween(player.x, player.y - 20, e.x, e.y - 20)) continue; // сквозь стену не достать
       const ea = Math.atan2(e.y - player.y, e.x - player.x);
       let da = Math.abs(ea - ang);
@@ -1055,11 +1087,20 @@ function playerAttack(tx, ty) {
       if (da < 1.25 || d < 30) {
         hurtEnemy(
           e,
-          (wp.dmg + player.level) *
+          (wp.dmg * (1 + 0.25 * (player.forged || 0)) + player.level) *
             player.dmgMul *
             (0.85 + Math.random() * 0.3) *
-            (1 + player.rage),
+            (1 + player.rage) *
+            (player.weakT > 0 ? 0.5 : 1), // в зловонии рука слабеет
         );
+        // верхом бьём вдвоём: зверь кусает ту же цель
+        if (player.mount && !e.dead && player.mount.hp > 0) {
+          hurtEnemy(
+            e,
+            player.mount.dmg * (0.85 + Math.random() * 0.3),
+            true,
+          );
+        }
         hit = true;
       }
     }
@@ -1068,7 +1109,7 @@ function playerAttack(tx, ty) {
 
   // удар по зверю — зверь даст сдачи или сбежит, а с убитого выпадут припасы
   for (const a of animals) {
-    if (a.hp <= 0) continue;
+    if (a.hp <= 0 || a === player.mount) continue; // своего скакуна не зашибёшь
     const d = Math.hypot(a.x - player.x, a.y - player.y);
     if (d < wp.range + 10 * (a.s || 1)) {
       const ea = Math.atan2(a.y - player.y, a.x - player.x);
@@ -1647,6 +1688,30 @@ function hostageMenu(h, cx, cy) {
 function animalMenu(a, cx, cy) {
   const opts = a.tamed
     ? [
+        // на коне или медведе можно ездить верхом — бьётесь вдвоём
+        ...(a.sp === "horse" || a.sp === "bear"
+          ? [
+              player.mount === a
+                ? {
+                    label: "🐎 Спешиться",
+                    fn: () => {
+                      player.mount = null;
+                      addLog("Ты спешился. " + a.name + " идёт рядом.", "#9fd08a");
+                    },
+                  }
+                : {
+                    label: "🐎 Сесть верхом",
+                    fn: () => {
+                      player.mount = a;
+                      AudioSys.pet();
+                      announce(
+                        "Ты в седле! " + a.name + " несёт быстрее ветра — и бьётесь вы теперь вдвоём.",
+                        "#9fd08a",
+                      );
+                    },
+                  },
+            ]
+          : []),
         { label: "🤚 Погладить", fn: () => petAnimal(a) },
         { label: "👋 Отпустить на волю", fn: () => releaseAnimal(a) },
       ]
@@ -1706,6 +1771,9 @@ function enemyMenu(e, cx, cy) {
 }
 
 function wandererMenu(wn, cx, cy) {
+  // лесные жители Тёмного леса говорят дольше и дарят артефакты
+  if (wn.type && typeof l2WandererMenu === "function")
+    return l2WandererMenu(wn, cx, cy);
   const wisdom = [
     "«Гладь волка супротив шерсти — авось приручишь».",
     "«Калин-царь боится того, кто пленных вызволяет».",
@@ -2079,6 +2147,33 @@ function propMenu(p, cx, cy) {
             addLog("Зажарил мясо на углях — сила вернулась (+25)!", "#8fd06a");
           },
         },
+        {
+          label: "⚒ Ковать оружие (бревно)",
+          fn: () => {
+            if (player.forged >= 3)
+              return addLog(
+                "Оружие прокалено трижды — больше металл не возьмёт.",
+                "#cbb87f",
+              );
+            if (!player.wood)
+              return addLog(
+                "Для ковки нужно бревно — сруби дерево.",
+                "#cbb87f",
+              );
+            player.wood--;
+            player.forged++;
+            AudioSys.hitMetal();
+            setTimeout(() => AudioSys.hitMetal(), 220);
+            setTimeout(() => AudioSys.hitMetal(), 440);
+            burst(p.x, p.y - 20, "#ffd76e", 14, 120);
+            announce(
+              "⚒ Оружие проковано на углях! Урон +25% (закалка " +
+                player.forged +
+                "/3).",
+              "#ffd76e",
+            );
+          },
+        },
       ],
     ],
     bones: [
@@ -2360,6 +2455,7 @@ function tameAnimal(a) {
 }
 function releaseAnimal(a) {
   a.tamed = false;
+  if (player.mount === a) player.mount = null;
   player.pets = player.pets.filter((x) => x !== a);
   hearts(a.x, a.y, 3);
   addLog(a.name + " уходит на волю. Прощай, друг.", "#cbb87f");
@@ -2651,6 +2747,14 @@ function update(dt) {
         player.poisonCd = 0.7;
         directDamage(6, "#ff6a4a", "трещина"); // земля горит — от dodge не спастись
         burst(player.x, player.y, "#8d8d85", 5, 60);
+      } else if (pl.kind === "fart") {
+        // зловоние Великана: не ранит, но силы уходят
+        player.poisonCd = 0.4;
+        player.weakT = 0.9;
+        floater(player.x, player.y - 66, "нечем дышать...", "#7a9a3d", 12);
+      } else if (pl.kind === "oil") {
+        // нефтяной след Чёрного — просто скользкая грязь, не жжётся
+        player.poisonCd = 0.4;
       } else {
         player.poisonCd = 0.8;
         directDamage(4, "#7a9a3d", "яд");
@@ -2690,9 +2794,35 @@ function update(dt) {
     const len = Math.hypot(mx, my);
     player.walk = len > 0;
     if (len > 0) {
-      const spd = player.speed * (player.feared > 0 ? 0.45 : 1);
+      // верхом скорость даёт зверь; зловоние Великана вяжет ноги
+      const base = player.mount
+        ? Math.max(player.speed, player.mount.speed * 1.15)
+        : player.speed;
+      const spd =
+        base * (player.feared > 0 ? 0.45 : 1) * (player.weakT > 0 ? 0.55 : 1);
       tryMove(player, (mx / len) * spd * dt, (my / len) * spd * dt);
       if (mx !== 0) player.face = mx > 0 ? 1 : -1;
+    }
+  }
+  player.weakT = Math.max(0, player.weakT - dt);
+  // верхом: зверь несёт седока, а встречных врагов расталкивает грудью
+  if (player.mount) {
+    const m = player.mount;
+    if (m.hp <= 0 || !m.tamed) {
+      player.mount = null;
+    } else if (player.walk) {
+      m.trampleCd = Math.max(0, (m.trampleCd || 0) - dt);
+      if (m.trampleCd <= 0) {
+        for (const e of enemies) {
+          if (e.dead || e.invuln || e.kind === "likho") continue;
+          if (Math.hypot(e.x - player.x, e.y - player.y) < 48) {
+            m.trampleCd = 0.7;
+            hurtEnemy(e, m.dmg * 0.5, true);
+            floater(e.x, e.y - 60, "растоптан!", "#9fd08a", 12);
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -2708,29 +2838,35 @@ function update(dt) {
   unstickPlayer();
 
   // логово Калина: внутри стен — красный экран и тревожная музыка, пока царь жив
-  const cca = world.castle;
-  // считаем только внутренность (без кольца стен и проёма ворот) — иначе
-  // тревога срабатывала, когда герой ещё стоял в арке ворот, ворота
-  // захлопывались под ним и выталкивали наружу, а звери успевали забежать внутрь
-  const inCastle =
-    player.x > (cca.x0 + 1) * TILE &&
-    player.x < (cca.x0 + cca.w - 1) * TILE &&
-    player.y > (cca.y0 + 1) * TILE &&
-    player.y < (cca.y0 + cca.h - 1) * TILE;
-  if (inCastle && !kalinDead) kalinAlerted = true;
-  if (kalinAlerted && !kalinDead) {
-    if (!alarmOn) {
-      alarmOn = true;
-      world.kalinLockdown = true; // ворота захлопываются — придётся драться до конца
-      AudioSys.alarmStart();
-      AudioSys.stomp();
-      toast("ТЫ В ЛОГОВЕ КАЛИНА-ЦАРЯ!", "#ff5540");
-      announce("Ворота замка захлопнулись — придётся драться до конца!", "#ff5540");
+  // (в Тёмном лесу замка нет)
+  if (world.castle) {
+    const cca = world.castle;
+    // считаем только внутренность (без кольца стен и проёма ворот) — иначе
+    // тревога срабатывала, когда герой ещё стоял в арке ворот, ворота
+    // захлопывались под ним и выталкивали наружу, а звери успевали забежать внутрь
+    const inCastle =
+      player.x > (cca.x0 + 1) * TILE &&
+      player.x < (cca.x0 + cca.w - 1) * TILE &&
+      player.y > (cca.y0 + 1) * TILE &&
+      player.y < (cca.y0 + cca.h - 1) * TILE;
+    if (inCastle && !kalinDead) kalinAlerted = true;
+    if (kalinAlerted && !kalinDead) {
+      if (!alarmOn) {
+        alarmOn = true;
+        world.kalinLockdown = true; // ворота захлопываются — придётся драться до конца
+        AudioSys.alarmStart();
+        AudioSys.stomp();
+        toast("ТЫ В ЛОГОВЕ КАЛИНА-ЦАРЯ!", "#ff5540");
+        announce("Ворота замка захлопнулись — придётся драться до конца!", "#ff5540");
+      }
+    } else if (alarmOn) {
+      alarmOn = false;
+      AudioSys.alarmStop();
     }
-  } else if (alarmOn) {
-    alarmOn = false;
-    AudioSys.alarmStop();
   }
+
+  // Тёмный лес: волны Лона, щекотка, плевки ЯМЫ
+  if (level === 2 && typeof l2Update === "function") l2Update(dt);
 
   // догорающая цепочка взрывов на месте павшего Калина
   if (kalinBoomT > 0) {
@@ -2747,12 +2883,16 @@ function update(dt) {
   }
   if (kalinBannerT > 0) {
     kalinBannerT -= dt;
-    if (kalinBannerT <= 0) checkVictory(); // победный экран ждал, пока догорит взрыв
+    if (kalinBannerT <= 0) {
+      // победный экран ждал, пока догорит взрыв
+      if (level === 2 && typeof l2Victory === "function") l2Victory();
+      else checkVictory();
+    }
   }
 
   // напоминание у запертых врат
   gateHintT = Math.max(0, gateHintT - dt);
-  if (!world.gateOpen && gateHintT <= 0) {
+  if (world.castle && !world.gateOpen && gateHintT <= 0) {
     const g = world.castle.gatePx;
     if (
       Math.hypot(player.x - (g.x0 + g.x1) / 2, player.y - (g.y0 + g.y1) / 2) <
@@ -2859,6 +2999,24 @@ function updateEnemies(dt) {
       e.grinding -= dt;
     }
     if (e.kind === "meat") e.hp = Math.min(e.maxHp, e.hp + 3 * dt); // мясо затягивает раны
+    // укус тигра: враг кровит
+    if (e.bleedT > 0) {
+      e.bleedT -= dt;
+      e.hp -= 6 * dt;
+      if (Math.random() < dt * 4) burst(e.x, e.y - 20, "#8c1f16", 2, 40);
+      if (e.hp <= 0) {
+        killEnemy(e);
+        continue;
+      }
+    }
+    // ультразвук гигантской летучей мыши: враг оглушён
+    if (e.stunT > 0) {
+      e.stunT -= dt;
+      e.walk = false;
+      if (Math.random() < dt * 3)
+        floater(e.x, e.y - 66, "✶", "#c9b4f0", 13);
+      continue;
+    }
 
     // цель: игрок или ближайший питомец; ~40% врагов рвутся именно к герою,
     // чтобы толпу нельзя было замкнуть на орду своих зверей
@@ -2886,6 +3044,17 @@ function updateEnemies(dt) {
           e.kind === "likho" ? "#c9a0e8" : "#ff9d7a",
         );
     }
+
+    // повадки нечисти Тёмного леса (level2.js); true — ход полностью обработан
+    // (ЯМА живёт по своим законам всегда, остальные — только заметив добычу)
+    if (
+      level === 2 &&
+      typeof L2AI !== "undefined" &&
+      L2AI[e.kind] &&
+      (e.kind === "yama" || td < (e.isBoss ? 340 : 280)) &&
+      L2AI[e.kind](e, target, td, pd, dt)
+    )
+      continue;
 
     // отскок после броска (кот-баюн, орёл)
     if (e.fleeT > 0) {
@@ -3463,10 +3632,19 @@ function updateAnimals(dt) {
   for (let i = animals.length - 1; i >= 0; i--) {
     const a = animals[i];
     if (a.hp <= 0) {
+      if (a === player.mount) player.mount = null; // скакун пал — герой на своих двоих
       animals.splice(i, 1);
       continue;
     }
     a.cd = Math.max(0, a.cd - dt);
+    if (a === player.mount) {
+      // зверь под седлом: несёт героя, своей воли не имеет
+      a.x = player.x;
+      a.y = player.y + 2;
+      a.face = player.face;
+      a.walk = player.walk;
+      continue;
+    }
     if (a.tamed) {
       // соратник: атакует врагов рядом, иначе идёт за героем
       let target = null,
@@ -3487,7 +3665,7 @@ function updateAnimals(dt) {
           a.cd = 2.2;
           a.face = target.x > a.x ? 1 : -1;
           breatheFire(a, target.x, target.y - 20, fire, true);
-        } else if (d > 46) {
+        } else if (d > 46 + (target.r || 0)) {
           a.walk = true;
           tryMove(
             a,
@@ -3500,6 +3678,15 @@ function updateAnimals(dt) {
           if (a.cd <= 0) {
             a.cd = 1;
             hurtEnemy(target, a.dmg * (0.85 + Math.random() * 0.3), true);
+            // повадки зверей Тёмного леса
+            if (a.sp === "tiger" && !target.dead) {
+              target.bleedT = Math.max(target.bleedT || 0, 3);
+              floater(target.x, target.y - 60, "прокушен!", "#c23b30", 12);
+            }
+            if (a.sp === "gbat" && !target.dead && !target.isBoss) {
+              target.stunT = Math.max(target.stunT || 0, 1.2);
+              floater(target.x, target.y - 60, "оглушён ультразвуком!", "#c9b4f0", 12);
+            }
           }
         }
       } else {
@@ -3789,8 +3976,13 @@ function updateHUD() {
     "🗡 " +
     wp.name +
     " (урон " +
-    Math.round((wp.dmg + player.level) * player.dmgMul) +
-    ")";
+    Math.round(
+      (wp.dmg * (1 + 0.25 * (player.forged || 0)) + player.level) *
+        player.dmgMul,
+    ) +
+    ")" +
+    (player.forged ? " ⚒" + player.forged : "") +
+    (player.mount ? " · 🐎 верхом" : "");
   // соратники группируются (Лось×2), длинный список обрезается — панель не разрастается
   let petTxt = "";
   if (player.pets.length) {
@@ -3968,6 +4160,11 @@ function getChunk(cx, cy) {
           g.fillRect(px, py, TILE, TILE);
           break;
       }
+      if (level === 2) {
+        // Тёмный лес: вся земля тонет в холодном сумраке
+        g.fillStyle = "rgba(14,8,30,0.42)";
+        g.fillRect(px, py, TILE, TILE);
+      }
     }
   ch = c;
   chunkCache.set(key, ch);
@@ -4030,6 +4227,41 @@ function draw() {
       ctx.fill();
       continue;
     }
+    if (pl.kind === "oil") {
+      // чёрный нефтяной след Чёрного
+      ctx.fillStyle = "rgba(8,8,14," + Math.min(0.7, a + 0.2) + ")";
+      ctx.beginPath();
+      ctx.ellipse(pl.x, pl.y, pl.r, pl.r * 0.42, 0, 0, 6.283);
+      ctx.fill();
+      ctx.fillStyle = "rgba(90,90,140," + a * 0.25 + ")";
+      ctx.beginPath();
+      ctx.ellipse(pl.x - 4, pl.y - 2, pl.r * 0.4, pl.r * 0.14, 0.3, 0, 6.283);
+      ctx.fill();
+      continue;
+    }
+    if (pl.kind === "fart") {
+      // зловонное облако Великана
+      const wob = Math.sin(gameTime * 1.8 + pl.x) * 6;
+      ctx.fillStyle = "rgba(122,154,61," + a * 0.5 + ")";
+      ctx.beginPath();
+      ctx.ellipse(pl.x + wob, pl.y - 14, pl.r, pl.r * 0.6, 0, 0, 6.283);
+      ctx.fill();
+      ctx.fillStyle = "rgba(154,180,80," + a * 0.35 + ")";
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.ellipse(
+          pl.x + Math.sin(gameTime * 2 + k * 2.1) * pl.r * 0.5,
+          pl.y - 20 - k * 10 + Math.cos(gameTime * 1.5 + k) * 6,
+          pl.r * 0.35,
+          pl.r * 0.2,
+          0,
+          0,
+          6.283,
+        );
+        ctx.fill();
+      }
+      continue;
+    }
     ctx.fillStyle = "rgba(94,66,28," + a + ")";
     ctx.beginPath();
     ctx.ellipse(pl.x, pl.y, pl.r, pl.r * 0.45, 0, 0, 6.283);
@@ -4048,6 +4280,9 @@ function draw() {
     ctx.fill();
   }
 
+  // убийственные волны Лона — кольца по земле (level2.js)
+  if (level === 2 && typeof l2DrawWorld === "function") l2DrawWorld();
+
   // очередь отрисовки по Y (псевдо-3D)
   const q = [];
   const inView = (x, y, m = 120) =>
@@ -4062,21 +4297,23 @@ function draw() {
   for (const b of world.buildings)
     if (inView(b.x, b.y))
       q.push({ y: b.y + b.h / 2, f: () => drawIzba(ctx, b, gameTime) });
-  // стены замка как объёмные блоки
+  // стены замка как объёмные блоки (в Тёмном лесу замка нет)
   const ca = world.castle;
-  for (let ty = ca.y0; ty < ca.y0 + ca.h; ty++)
-    for (let tx = ca.x0; tx < ca.x0 + ca.w; tx++) {
-      if (world.tileAt(tx, ty) !== T.WALL) continue;
-      const wx = tx * TILE,
-        wy = (ty + 1) * TILE;
-      if (!inView(wx, wy)) continue;
-      q.push({ y: wy - 2, f: () => drawWallBlock(wx, wy, tx, ty) });
+  if (ca) {
+    for (let ty = ca.y0; ty < ca.y0 + ca.h; ty++)
+      for (let tx = ca.x0; tx < ca.x0 + ca.w; tx++) {
+        if (world.tileAt(tx, ty) !== T.WALL) continue;
+        const wx = tx * TILE,
+          wy = (ty + 1) * TILE;
+        if (!inView(wx, wy)) continue;
+        q.push({ y: wy - 2, f: () => drawWallBlock(wx, wy, tx, ty) });
+      }
+    // запертые врата замка
+    if (!world.gateOpen) {
+      const g = world.castle.gatePx;
+      if (inView((g.x0 + g.x1) / 2, g.y1))
+        q.push({ y: g.y1 - 2, f: () => drawGateDoors(g) });
     }
-  // запертые врата замка
-  if (!world.gateOpen) {
-    const g = world.castle.gatePx;
-    if (inView((g.x0 + g.x1) / 2, g.y1))
-      q.push({ y: g.y1 - 2, f: () => drawGateDoors(g) });
   }
   for (const it of groundItems)
     if (inView(it.x, it.y)) q.push({ y: it.y, f: () => drawGroundItem(it) });
@@ -4237,6 +4474,21 @@ function draw() {
     ctx.fillStyle = "rgba(40,90,30,0.10)";
     ctx.fillRect(0, 0, VW, VH);
   }
+  if (level === 2) {
+    // Тёмный лес: холодный сумрак сгущается к краям экрана
+    const vg = ctx.createRadialGradient(
+      VW / 2,
+      VH / 2,
+      VH * 0.3,
+      VW / 2,
+      VH / 2,
+      VH * 0.9,
+    );
+    vg.addColorStop(0, "rgba(8,4,20,0.05)");
+    vg.addColorStop(1, "rgba(4,2,14,0.5)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, VW, VH);
+  }
 
   // смерть Калина — крупная надпись прямо в центре экрана, с плавным появлением/уходом
   if (kalinBannerT > 0) {
@@ -4250,14 +4502,14 @@ function draw() {
     ctx.font = "bold 52px Georgia";
     ctx.strokeStyle = "rgba(0,0,0,0.85)";
     ctx.lineWidth = 8;
-    ctx.strokeText("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН!", VW / 2, VH / 2 - 26);
+    ctx.strokeText(kalinBannerText, VW / 2, VH / 2 - 26);
     ctx.fillStyle = "#ffd76e";
-    ctx.fillText("☠ КАЛИН-ЦАРЬ ПОВЕРЖЕН!", VW / 2, VH / 2 - 26);
+    ctx.fillText(kalinBannerText, VW / 2, VH / 2 - 26);
     ctx.font = "italic 22px Georgia";
     ctx.lineWidth = 5;
-    ctx.strokeText("Земля вздохнула свободно", VW / 2, VH / 2 + 18);
+    ctx.strokeText(kalinBannerSub, VW / 2, VH / 2 + 18);
     ctx.fillStyle = "#e8d9a8";
-    ctx.fillText("Земля вздохнула свободно", VW / 2, VH / 2 + 18);
+    ctx.fillText(kalinBannerSub, VW / 2, VH / 2 + 18);
     ctx.restore();
   }
 
@@ -4475,7 +4727,8 @@ function drawGroundItem(it) {
 function drawPlayer() {
   humanoid(ctx, gameTime, {
     x: player.x,
-    y: player.y,
+    y: player.y - (player.mount ? 16 : 0), // верхом герой сидит выше
+
     s: 1.05,
     face: player.face,
     walk: player.walk,
@@ -4515,6 +4768,10 @@ function drawEnemy(e) {
     phase: e.phase,
     attack: atk,
   };
+  // нечисть Тёмного леса рисует level2.js
+  if (typeof L2DRAW !== "undefined" && L2DRAW[e.kind]) {
+    L2DRAW[e.kind](e, common, t);
+  } else
   switch (e.kind) {
     case "bandit":
       humanoid(ctx, t, {
@@ -4818,11 +5075,12 @@ function drawEnemy(e) {
       break;
   }
   // полоса здоровья над врагом (Лихо неубиваемо — полосы не имеет)
-  if (e.hp < e.maxHp && e.kind !== "likho") {
+  if (e.hp < e.maxHp && e.kind !== "likho" && !e.invuln) {
     const w = e.isBoss ? 52 : 34,
       hh = e.isBoss ? 6 : 4,
       oy =
-        e.kind === "kalin" ? 118 : e.kind === "chudo" ? 92 : e.isBoss ? 92 : 72;
+        e.barOy ||
+        (e.kind === "kalin" ? 118 : e.kind === "chudo" ? 92 : e.isBoss ? 92 : 72);
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(e.x - w / 2 - 1, e.y - oy - 1, w + 2, hh + 2);
     ctx.fillStyle = e.isBoss ? "#c23bd6" : "#c23b30";
@@ -4850,7 +5108,12 @@ function drawAnimal(a) {
     belly: a.belly,
     wing: a.wing,
     crest: a.crest,
+    tigerStripes: a.tigerStripes,
   };
+  // звери Тёмного леса со своей рисовкой (level2.js)
+  if (typeof L2ANIMDRAW !== "undefined" && L2ANIMDRAW[a.draw]) {
+    L2ANIMDRAW[a.draw](o, t);
+  } else
   switch (a.draw) {
     case "bird":
       drawBird(ctx, t, o);
@@ -5007,6 +5270,8 @@ function drawHostage(h) {
 }
 
 function drawWanderer(w) {
+  if (w.type && typeof l2DrawWanderer === "function")
+    return l2DrawWanderer(w); // лесные жители выглядят по-своему
   humanoid(ctx, gameTime, {
     x: w.x,
     y: w.y,

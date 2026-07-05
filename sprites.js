@@ -366,6 +366,11 @@ function quadruped(ctx, time, o) {
     ctx.beginPath(); ctx.moveTo(13, -31); ctx.quadraticCurveTo(4, -44, 12, -44); ctx.quadraticCurveTo(9, -37, 16, -33); ctx.fill();
     ctx.beginPath(); ctx.moveTo(20, -31); ctx.quadraticCurveTo(28, -45, 20, -44); ctx.quadraticCurveTo(24, -37, 17, -33); ctx.fill();
   }
+  if (o.tigerStripes) { // тигриные полосы по бокам
+    ctx.strokeStyle = 'rgba(30,20,10,0.75)'; ctx.lineWidth = 2.2;
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(-11 + i * 5.5, -25); ctx.quadraticCurveTo(-13 + i * 5.5, -17, -10 + i * 5.5, -9); ctx.stroke(); }
+    ctx.lineWidth = 1.3; ctx.strokeStyle = 'rgba(15,10,5,0.6)';
+  }
   if (o.ribs) { // проступающие рёбра — у Суки
     ctx.strokeStyle = 'rgba(230,225,210,0.55)'; ctx.lineWidth = 1.4;
     for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(-10 + i * 5, -25); ctx.quadraticCurveTo(-12 + i * 5, -17, -9 + i * 5, -10); ctx.stroke(); }
