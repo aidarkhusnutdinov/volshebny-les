@@ -165,6 +165,9 @@ function generateWorld2(seed) {
       else if (d < 6) terrain[idx(xx, yy)] = T.STONE;
     }
     world.pit = { tx: x, ty: y, x: (x + 0.5) * TILE, y: (y + 0.5) * TILE, r: 2.6 * TILE };
+    // у края — могилы тех, кто дошёл
+    for (let g = 0; g < 3; g++)
+      world.props.push({ type: 'grave', x: (x - 4 + g * 4 + rnd()) * TILE, y: (y + 6.6) * TILE, used: false });
     carvePath(x, y + 7);
   }
 
@@ -224,7 +227,7 @@ function generateWorld2(seed) {
     } else if (rnd() < 0.018) {
       const r = rnd();
       world.props.push({
-        type: r < 0.28 ? 'mushroom' : r < 0.44 ? 'gnilushka' : r < 0.58 ? 'stone' : r < 0.72 ? 'bush' : r < 0.88 ? 'stump' : 'bones',
+        type: r < 0.24 ? 'mushroom' : r < 0.38 ? 'gnilushka' : r < 0.5 ? 'grave' : r < 0.62 ? 'stone' : r < 0.76 ? 'bush' : r < 0.9 ? 'stump' : 'bones',
         x: (x + 0.2 + rnd() * 0.6) * TILE, y: (y + 0.2 + rnd() * 0.6) * TILE, used: false,
       });
     }
@@ -291,7 +294,7 @@ function newGame2() {
   world = generateWorld2((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   enemies = []; animals = []; hostages = []; wanderers = [];
   groundItems = []; projectiles = []; particles = []; floaters = [];
-  pools = []; l2Waves = []; l2Falls = []; l2EventT = 16;
+  pools = []; l2Waves = []; l2Falls = []; l2EventT = 16; l2Eyes = []; l2Wisps = [];
   chunkCache = new Map();
   gameOver = false; victory = false; kalinDead = true;
   freedHostages = 0; totalHostages = 0;
@@ -768,7 +771,10 @@ const L2AI = {
 
 // ---------- случайные ужасы леса: земля разверзается, с неба падает ----------
 let l2EventT = 16,
-  l2Falls = [];
+  l2Falls = [],
+  l2Eyes = [], // пары глаз, мигающие в чаще
+  l2EyeT = 4,
+  l2Wisps = []; // ползучий туман
 
 function l2Quake() {
   announce('Земля дрожит и РАЗВЕРЗАЕТСЯ под ногами!', '#ff6a4a');
@@ -815,6 +821,41 @@ function l2SkyFall() {
 
 // ---------- обновление уровня 2 (зовётся из update) ----------
 function l2Update(dt) {
+  // пары глаз загораются в темноте на краю зрения — и гаснут, если подойти
+  l2EyeT -= dt;
+  if (l2EyeT <= 0 && l2Eyes.length < 4) {
+    l2EyeT = 5 + Math.random() * 7;
+    const ang = Math.random() * 6.283, d = 330 + Math.random() * 220;
+    const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
+    if (world.passable(x, y))
+      l2Eyes.push({ x, y, t: 4 + Math.random() * 4, blink: Math.random() * 6 });
+  }
+  for (let i = l2Eyes.length - 1; i >= 0; i--) {
+    const ey = l2Eyes[i];
+    ey.t -= dt;
+    // подошёл ближе — глаза гаснут (и по спине холодок)
+    if (ey.t <= 0 || Math.hypot(player.x - ey.x, player.y - ey.y) < 200) {
+      if (ey.t > 0) floater(ey.x, ey.y - 30, 'глаза погасли...', '#c9a0e8', 11);
+      l2Eyes.splice(i, 1);
+    }
+  }
+
+  // туман ползёт лентами
+  while (l2Wisps.length < 5) {
+    l2Wisps.push({
+      x: player.x + (Math.random() - 0.5) * 1000,
+      y: player.y + (Math.random() - 0.5) * 700,
+      w: 120 + Math.random() * 160,
+      vx: 6 + Math.random() * 8,
+      ph: Math.random() * 6.283,
+    });
+  }
+  for (let i = l2Wisps.length - 1; i >= 0; i--) {
+    const ws = l2Wisps[i];
+    ws.x += ws.vx * dt;
+    if (Math.hypot(ws.x - player.x, ws.y - player.y) > 900) l2Wisps.splice(i, 1);
+  }
+
   // редкие внезапные ужасы — лес живёт своей злой жизнью
   l2EventT -= dt;
   if (l2EventT <= 0) {
@@ -894,8 +935,40 @@ function l2Update(dt) {
   }
 }
 
+// туман — поверх всех сущностей (зовётся из draw перед виньеткой, экранные координаты)
+function l2DrawOverlay() {
+  for (const ws of l2Wisps) {
+    const sx2 = ws.x - camX, sy2 = ws.y - camY;
+    if (sx2 < -300 || sx2 > VW + 300 || sy2 < -200 || sy2 > VH + 200) continue;
+    const breathe = Math.sin(gameTime * 0.5 + ws.ph) * 0.02;
+    ctx.fillStyle = 'rgba(150,160,190,' + (0.055 + breathe) + ')';
+    ctx.beginPath();
+    ctx.ellipse(sx2, sy2 + Math.sin(gameTime * 0.4 + ws.ph) * 12, ws.w, ws.w * 0.22, 0, 0, 6.283);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(170,180,210,' + (0.04 + breathe) + ')';
+    ctx.beginPath();
+    ctx.ellipse(sx2 + ws.w * 0.3, sy2 - 10, ws.w * 0.5, ws.w * 0.13, 0, 0, 6.283);
+    ctx.fill();
+  }
+}
+
 // рисуется в мировых координатах (зовётся из draw после луж)
 function l2DrawWorld() {
+  // глаза, мигающие в чаще
+  for (const ey of l2Eyes) {
+    const blink = Math.sin(gameTime * 2.2 + ey.blink) > -0.75 ? 1 : 0.1; // изредка моргают
+    const a = Math.min(1, ey.t) * blink;
+    ctx.fillStyle = 'rgba(255,190,60,' + a * 0.9 + ')';
+    ctx.beginPath();
+    ctx.ellipse(ey.x - 5, ey.y - 30, 2.6, 3.2, 0, 0, 6.283);
+    ctx.ellipse(ey.x + 5, ey.y - 30, 2.6, 3.2, 0, 0, 6.283);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(200,40,20,' + a * 0.8 + ')';
+    ctx.beginPath();
+    ctx.arc(ey.x - 5, ey.y - 30, 1.1, 0, 6.283);
+    ctx.arc(ey.x + 5, ey.y - 30, 1.1, 0, 6.283);
+    ctx.fill();
+  }
   // падающее с неба: тень растёт, тушка/камень снижается
   for (const f of l2Falls) {
     const t01 = 1 - Math.min(1, f.h / 500);
@@ -1023,6 +1096,11 @@ const L2_NPC = {
       healPlayer(25);
       announce('🧿 Оберег отшельника: +25 к здоровью навсегда!', '#ffd76e');
     },
+    after: [
+      '«Оберег я тебе уже отдал, второго тридцать лет намаливать».',
+      '«Иди, витязь. Молитва моя с тобой, а мне безмолвствовать пора».',
+      '«Всё сказано. Теперь дела говорят, не слова».',
+    ],
   },
   koldun: {
     title: 'Колдун',
@@ -1037,6 +1115,11 @@ const L2_NPC = {
       gainSmek(2, 'Колдовская наука впрок пошла.');
       announce('🔥 Наговор колдуна: сила удара +15%!', '#ffd76e');
     },
+    after: [
+      '«Два наговора на одно железо не кладут — треснет».',
+      '«Чего пришёл? Иди бей нечисть, наговор сам не рубит».',
+      '«Надоел. Кыш, а то в жабу... шучу. Или нет».',
+    ],
   },
   monah: {
     title: 'Монах-пустынник',
@@ -1052,6 +1135,11 @@ const L2_NPC = {
       healPlayer(999);
       announce('✝ Благословение монаха: +15 здоровья, +5% увёртливости!', '#ffd76e');
     },
+    after: [
+      '«Благословение не мёд, дважды не мажут. Ступай с Богом».',
+      'Монах молча перекрестил тебя и вернулся к молитве.',
+      '«Раны душевные лечи делом, телесные — у родника».',
+    ],
   },
   gribnik: {
     title: 'Старичок-грибничок',
@@ -1065,6 +1153,11 @@ const L2_NPC = {
       player.items.berries += 2;
       announce('🍄 Гостинец грибничка: 3 гриба и ягоды в котомку!', '#ffd76e');
     },
+    after: [
+      '«Всё роздал, милок. Новые грибочки за ночь не растут».',
+      '«Сам-то собирай! Вон гнилушки светятся — бери, нечисть пугать».',
+      '«Ты ешь-то их не разом, грибочки-то мои...»',
+    ],
   },
 };
 
@@ -1076,11 +1169,19 @@ function l2WandererMenu(wn, cx, cy) {
       {
         label: '💬 Поговорить',
         fn: () => {
+          if (wn.gifted) {
+            // подарок отдан — дальше вежливо отнекивается, каждый раз по-своему
+            const aft = npc.after[wn.afterIdx % npc.after.length];
+            wn.afterIdx = (wn.afterIdx || 0) + 1;
+            announce(npc.title + ': ' + aft, '#a0e8ff');
+            return;
+          }
           const line = npc.lines[Math.min(wn.talkIdx, npc.lines.length - 1)];
           announce(npc.title + ': ' + line, '#a0e8ff');
           wn.talkIdx++;
-          if (wn.talkIdx >= npc.lines.length && !wn.gifted) {
+          if (wn.talkIdx >= npc.lines.length) {
             wn.gifted = true;
+            wn.afterIdx = 0;
             AudioSys.pickup();
             npc.gift();
           } else if (wn.talkIdx === 1) {

@@ -1838,7 +1838,22 @@ function wandererMenu(wn, cx, cy) {
 
 function treeMenu(tr, cx, cy) {
   const tname =
-    tr.kind === "birch" ? "Берёза" : tr.kind === "spruce" ? "Ель" : "Дуб";
+    tr.kind === "birch"
+      ? "Берёза"
+      : tr.kind === "spruce"
+        ? "Ель"
+        : tr.kind === "dark"
+          ? "Чёрное дерево"
+          : tr.kind === "deadtree"
+            ? "Мёртвое дерево"
+            : "Дуб";
+  const tnameAcc = {
+    "Берёза": "берёзу",
+    "Ель": "ель",
+    "Дуб": "дуб",
+    "Чёрное дерево": "чёрное дерево",
+    "Мёртвое дерево": "мёртвое дерево",
+  }[tname];
   openMenu(
     cx,
     cy,
@@ -1986,6 +2001,33 @@ function propMenu(p, cx, cy) {
               "Гнилое дерево светится мертвенным светом. Нечисть его боится.",
               "#8cf0aa",
             ),
+        },
+      ],
+    ],
+    grave: [
+      "Могилка",
+      [
+        {
+          label: "🪦 Прочесть надпись",
+          fn: () => {
+            const eps = [
+              "«Пошёл за грибами. Не вернулся».",
+              "«Не верьте шёпоту» — и всё, дальше стёрто.",
+              "«Здесь лежит Фрол. Дошёл до ЯМЫ».",
+              "«Услышишь смех — беги». Свежая могила.",
+              "«Любил этот лес. Зря».",
+              "Крест без надписи. Только царапины, будто когтями.",
+            ];
+            addLog(eps[Math.floor(Math.random() * eps.length)], "#c9a0e8");
+            if (!p.read) {
+              p.read = true;
+              gainXP(3);
+            }
+          },
+        },
+        {
+          label: "🙏 Перекреститься",
+          fn: () => addLog("Упокой душу, Господи. В лесу будто тише стало.", "#cbb87f"),
         },
       ],
     ],
@@ -2765,8 +2807,15 @@ function interact() {
     }
     return false;
   };
-  for (const p of world.props) if (consider(p.x, p.y)) best = p;
-  for (const tr of world.trees) if (tr.alive && consider(tr.x, tr.y)) best = tr;
+  for (const p of world.props)
+    if (p.type !== "web" && consider(p.x, p.y)) best = p; // паутина — декор, E не для неё
+  for (const tr of world.trees)
+    if (
+      tr.alive &&
+      Math.hypot(tr.x - player.x, tr.y - player.y) < 60 &&
+      consider(tr.x, tr.y)
+    )
+      best = tr; // дерево — только если оно прямо под рукой
   for (const b of world.buildings) if (consider(b.x, b.y + 40)) best = b;
   for (const a of animals)
     if (a.hp > 0 && a.tamed && a !== player.mount && consider(a.x, a.y))
@@ -3116,10 +3165,11 @@ function update(dt) {
       // в Тёмном лесу птицы не поют — шепоты, уханье, всхлипы, визги и смех
       birdTimer = 9 + Math.random() * 14;
       const r = Math.random();
-      if (r < 0.28) AudioSys.whisper();
-      else if (r < 0.5) AudioSys.owl();
-      else if (r < 0.68) AudioSys.sob();
-      else if (r < 0.86) AudioSys.shriek();
+      if (r < 0.24) AudioSys.whisper();
+      else if (r < 0.44) AudioSys.owl();
+      else if (r < 0.6) AudioSys.sob();
+      else if (r < 0.76) AudioSys.raven();
+      else if (r < 0.9) AudioSys.shriek();
       else AudioSys.evilLaugh();
     } else {
       birdTimer = 14 + Math.random() * 20;
@@ -4673,6 +4723,7 @@ function draw() {
     ctx.fillStyle = "rgba(40,90,30,0.10)";
     ctx.fillRect(0, 0, VW, VH);
   }
+  if (level === 2 && typeof l2DrawOverlay === "function") l2DrawOverlay();
   if (level === 2) {
     // Тёмный лес: холодный сумрак сгущается к краям экрана
     const vg = ctx.createRadialGradient(

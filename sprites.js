@@ -775,6 +775,18 @@ function drawProp(ctx, p, time) {
         ctx.beginPath(); ctx.arc(0, -8, 13, 0, 6.283); ctx.fill();
       }
       break;
+    case 'grave': { // покосившийся крест над холмиком
+      shadow(ctx, 0, 0, 11);
+      ctx.fillStyle = '#2c3324';
+      ctx.beginPath(); ctx.ellipse(0, -2, 11, 5, 0, 0, 6.283); ctx.fill(); ctx.stroke();
+      const tilt = Math.sin(p.x * 7) * 0.16; // у каждого свой наклон
+      ctx.save(); ctx.rotate(tilt);
+      ctx.fillStyle = '#4a3e30'; ctx.strokeStyle = '#241c14'; ctx.lineWidth = 1.2;
+      ctx.fillRect(-2, -26, 4, 24); ctx.strokeRect(-2, -26, 4, 24);
+      ctx.fillRect(-8, -21, 16, 3.6); ctx.strokeRect(-8, -21, 16, 3.6);
+      ctx.restore();
+      break;
+    }
     case 'stone':
       shadow(ctx, 0, 0, 11);
       ctx.fillStyle = '#8d8f88'; ctx.beginPath();
