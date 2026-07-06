@@ -316,6 +316,31 @@ function applyHeroSnap(s) {
   });
 }
 
+// тёмная заставка перед входом в Тёмный лес (после победного экрана 1 уровня)
+function showL2Intro() {
+  overlayScene('dark');
+  const ov = document.getElementById('overlay');
+  ov.style.display = 'flex';
+  ov.querySelector('.box').innerHTML =
+    '<h1>ТЁМНЫЙ ЛЕС</h1>' +
+    '<h2>Русь, год 1243. Беды не кончились…</h2>' +
+    '<p>Трудно жилось людям на Руси в XIII веке: одну беду одолеешь — другая уже у порога. ' +
+    'Нечисть, что уцелела после Калиновой погибели, бежала за овраги — в соседний лес, ' +
+    'что был Волшебному родным братом. Чёрным словом и гнилым дыханием испортила она его ' +
+    'до самого корня: погасли светляки, почернели берёзы, пересохли родники — ' +
+    'и опустилась на чащу ночь без рассвета.</p>' +
+    '<p>В сердце той чащи отворилась <span class="goldword">ЯМА</span> — дыра в преисподнюю, ' +
+    'и стерегут её сон четыре новых хозяина леса. Одолей их, изведи ЯМУ — и верни лесу свет. ' +
+    'Ищи в чаще скиты лесных жителей: их свет — подмога. ' +
+    'А сгинешь во тьме — восстанешь у кромки леса таким, каким вошёл.</p>' +
+    '<button id="startBtn">ШАГНУТЬ ВО ТЬМУ</button>';
+  document.getElementById('startBtn').onclick = () => {
+    ov.style.display = 'none';
+    startLevel2();
+    running = true;
+  };
+}
+
 function startLevel2() {
   l2HeroSnap = snapshotHero(); // погибнет — вернётся сюда таким же
   newGame2();
@@ -1259,6 +1284,7 @@ function l2Victory() {
   running = false;
   AudioSys.droneStop();
   AudioSys.victory();
+  overlayScene('light'); // тьма развеяна — лес снова светел
   showOverlay(
     'ТЬМА РАЗВЕЯНА!',
     'Слава богатырю ' + playerName + '!',

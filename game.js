@@ -1049,15 +1049,18 @@ function checkVictory() {
     victory = true;
     running = false;
     AudioSys.victory();
+    overlayScene("light");
     showOverlay(
       "ПОБЕДА!",
       "Слава богатырю " + playerName + "!",
       "<p>Все пленники свободны, Калин-царь повержен, воеводы его разбиты. " +
+        "Волшебный лес вздохнул свободно: зазвенели родники, звери вышли из нор без страха. " +
         "Гусляры сложат песни о подвиге " +
         playerName +
-        ", а берёзы будут шуметь о нём века.</p>" +
-        "<p>Но с полуночи тянет гнилью: за оврагами чернеет ТЁМНЫЙ ЛЕС, " +
-        "и оттуда не вернулся ещё ни один. Богатырская дорога зовёт дальше.</p>" +
+        ", а дубы будут шуметь о нём века.</p>" +
+        "<p>Но беды на Руси не кончились: недобитая нечисть бежала за овраги — " +
+        "в соседний лес, что был Волшебному родным братом. С полуночи уже тянет гнилью: " +
+        "чаща та почернела, и оттуда не вернулся ещё ни один. Богатырская дорога зовёт дальше.</p>" +
         '<p style="text-align:center;color:#ffd76e">Уровень ' +
         player.level +
         " · соратников: " +
@@ -1073,6 +1076,7 @@ function doGameOver() {
   running = false;
   if (AudioSys.droneStop) AudioSys.droneStop();
   AudioSys.gameover();
+  overlayScene(level === 2 ? "dark" : "");
   showOverlay(
     "БОГАТЫРЬ ПАЛ",
     "Но песня о нём не кончена...",
@@ -1086,6 +1090,18 @@ function doGameOver() {
       "</p>",
     "ВОССТАТЬ ВНОВЬ",
   );
+}
+
+// фон заставки: 'light' — солнечный Волшебный лес, 'dark' — почерневшая чаща, '' — простая тьма
+function overlayScene(kind) {
+  const ov = document.getElementById("overlay"),
+    bg = document.getElementById("ovbg");
+  if (!ov || !bg) return;
+  ov.className = kind ? "scene-" + kind : "";
+  const tpl = document.getElementById(
+    kind === "light" ? "sceneTplLight" : kind === "dark" ? "sceneTplDark" : "",
+  );
+  bg.innerHTML = tpl ? tpl.innerHTML : "";
 }
 
 function showOverlay(h1, h2, html, btnText) {
@@ -1112,8 +1128,9 @@ function startGame() {
   }
   document.getElementById("overlay").style.display = "none";
   AudioSys.init();
-  if (victory && level === 1 && typeof startLevel2 === "function") {
-    startLevel2(); // Русь освобождена — дальше Тёмный лес
+  if (victory && level === 1 && typeof showL2Intro === "function") {
+    showL2Intro(); // тёмная заставка перед Тёмным лесом; её кнопка зовёт startLevel2
+    return;
   } else if (gameOver && level === 2 && typeof restartLevel2 === "function") {
     restartLevel2(); // пал в лесу — восстаёт у его кромки, каким вошёл
   } else if (gameOver || victory || !world) {
@@ -5878,6 +5895,7 @@ if (nameInputEl) {
     if (ev.key === "Enter") startGame();
   };
 }
+overlayScene("light"); // стартовый экран — солнечный Волшебный лес
 newGame();
 draw();
 requestAnimationFrame(frame);
