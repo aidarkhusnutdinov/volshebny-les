@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Волшебный лес — тьма развеяна</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0a0d08;font-family:Georgia,'Times New Roman',serif;}
+  #cv{display:block;width:100vw;height:100vh;}
+  #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,5,3,.82);z-index:100;}
+  #overlay .box{max-width:620px;padding:38px 52px;text-align:center;background:linear-gradient(180deg,rgba(28,22,12,.95),rgba(16,12,6,.95));border:2px solid #6b5327;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.6),inset 0 0 22px rgba(0,0,0,.5);color:#e8d9a8;}
+  #overlay h1{font-size:38px;margin:0 0 8px;color:#f5e6b8;letter-spacing:3px;text-shadow:0 3px 0 #3a2c10,0 6px 18px #000;}
+  #overlay h2{font-size:17px;color:#c9a94f;margin:0 0 18px;font-weight:normal;font-style:italic;}
+  #overlay p{color:#cbb87f;font-size:14.5px;line-height:1.7;}
+  #overlay button{margin-top:20px;font-family:inherit;font-size:20px;padding:12px 46px;background:linear-gradient(180deg,#4a7a2a,#2c4d17);color:#f5e6b8;border:2px solid #c9a94f;border-radius:8px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 14px rgba(0,0,0,.7);}
+  #overlay button:hover{background:linear-gradient(180deg,#5b9435,#37601d);}
+  #hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;color:#b8a570;text-shadow:0 1px 2px #000;font-family:Verdana,sans-serif;z-index:10;}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hint">M — звук · R — заново · Esc — в игру</div>
+<a id="backBtn" href="index.html" style="position:fixed;top:12px;right:14px;z-index:50;font-family:Georgia,serif;font-size:14px;color:#e8d9a8;background:rgba(20,15,7,.75);border:1px solid #6b5327;border-radius:7px;padding:7px 16px;text-decoration:none;letter-spacing:1px;">⟵ В ИГРУ</a>
+<div id="overlay">
+  <div class="box">
+    <h1>ТЬМА РАЗВЕЯНА!</h1>
+    <h2>Финальный мультик «Волшебного леса»</h2>
+    <p>Чёрный лес светлеет и оживает, восходит солнце. Монахи пляшут и несут
+    богатырю угощение: блюдо с картошкой, жареных лебедя и гуся, пироги да
+    вино в бутылках и рюмках. Играет весёлая музыка.</p>
+    <button id="startBtn">▶ СМОТРЕТЬ</button>
+  </div>
+</div>
+<script>
+'use strict';
+// ============================================================
+//  Финальный мультик: лес из тёмного становится светлым,
+//  монахи пляшут и несут богатырю пир. Чистый Canvas + WebAudio.
+// ============================================================
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, S = 1; // виртуальная сцена 1280x720, растянутая на окно
+function resize() {
+  W = cv.width = innerWidth * devicePixelRatio;
+  H = cv.height = innerHeight * devicePixelRatio;
+  S = Math.min(W / 1280, H / 720);
+}
+addEventListener('resize', resize);
+resize();
+
+// детерминированный лес
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const lerp = (a, b, k) => a + (b - a) * k;
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const ease = (v) => v * v * (3 - 2 * v);
+// смешение двух цветов [r,g,b]
+function mix(c1, c2, k) {
+  return 'rgb(' + Math.round(lerp(c1[0], c2[0], k)) + ',' +
+    Math.round(lerp(c1[1], c2[1], k)) + ',' + Math.round(lerp(c1[2], c2[2], k)) + ')';
+}
+
+// ---------- сцена ----------
+const GROUND_Y = 560;
+const rnd = mulberry32(20260706);
+const trees = [];
+for (let i = 0; i < 34; i++) {
+  const depth = rnd(); // 0 — дальние, 1 — ближние
+  trees.push({
+    x: 30 + rnd() * 1220,
+    y: lerp(420, 690, depth),
+    s: lerp(0.45, 1.15, depth),
+    bend: (rnd() - 0.5) * 1.6, // кривизна тёмного дерева
+    crown: 0.8 + rnd() * 0.5,
+    ph: rnd() * 6.28,
+    kind: rnd() < 0.3 ? 'spruce' : 'oak',
+  });
+}
+// стол и герой стоят на поляне — деревья туда не пускаем
+for (const tr of trees)
+  if (tr.y > 500 && tr.x > 240 && tr.x < 1130) tr.x = tr.x < 660 ? 100 + rnd() * 130 : 1150 + rnd() * 110;
+trees.sort((a, b) => a.y - b.y);
+
+const flowers = [];
+for (let i = 0; i < 60; i++)
+  flowers.push({
+    x: 20 + rnd() * 1240, y: 470 + rnd() * 230,
+    hue: rnd() < 0.4 ? '#e86a8a' : rnd() < 0.5 ? '#ffd76e' : rnd() < 0.5 ? '#8ab4ff' : '#fff',
+    ph: rnd() * 6.28, s: 0.7 + rnd() * 0.6,
+  });
+
+const birds = [];
+for (let i = 0; i < 7; i++)
+  birds.push({ x: rnd() * 1280, y: 60 + rnd() * 160, v: 40 + rnd() * 50, ph: rnd() * 6.28, born: 7 + rnd() * 9 });
+
+const butterflies = [];
+for (let i = 0; i < 8; i++)
+  butterflies.push({ cx: 100 + rnd() * 1080, cy: 380 + rnd() * 220, r: 30 + rnd() * 60, ph: rnd() * 6.28, col: rnd() < 0.5 ? '#ffd76e' : '#e86a8a', born: 9 + rnd() * 10 });
+
+// ---------- пир: блюда и монахи ----------
+const TABLE = { x: 640, y: 596, w: 430, h: 14, legH: 46 };
+const SLOTS = [-165, -85, -5, 75, 155].map((dx) => ({ x: TABLE.x + dx, y: TABLE.y - 8 }));
+const DISHES = ['potato', 'swan', 'pies', 'goose', 'wine'];
+// монах: выходит справа, ставит блюдо на стол, отходит в хоровод и пляшет
+const monks = DISHES.map((dish, i) => ({
+  dish, slot: i,
+  tStart: 7.5 + i * 2.6,
+  ph: i * 1.3,
+  danceAng: (i / DISHES.length) * Math.PI * 2, // место в хороводе
+  squat: i % 2 === 1, // через одного пляшут вприсядку
+}));
+const RING = { x: 960, y: 520, rx: 150, ry: 48 };
+
+const floaters = [];
+function floater(x, y, txt, col, size) {
+  floaters.push({ x, y, txt, col, size, life: 1.6 });
+}
+const sparks = [];
+function spark(x, y, col) {
+  sparks.push({ x, y, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 60, col, life: 0.9 + Math.random() * 0.7 });
+}
+
+const BANNERS = [
+  { t: 1.6, dur: 4, txt: 'ТЬМА РАЗВЕЯНА!', col: '#ffd76e' },
+  { t: 6.2, dur: 4, txt: 'ЛЕС СНОВА СВЕТЕЛ И ВОЛШЕБЕН!', col: '#8fd06a' },
+  { t: 11, dur: 5, txt: 'ПИР НА ВЕСЬ МИР!', col: '#ffd76e' },
+  { t: 17, dur: 4.5, txt: 'СЛАВА БОГАТЫРЮ!', col: '#f5e6b8' },
+];
+
+// ---------- рисовалки ----------
+function drawTree(tr, k, t) {
+  // k: 0 — мёртвое кривое, 1 — живое зелёное
+  const s = tr.s, x = tr.x, y = tr.y;
+  const bend = tr.bend * (1 - k);
+  const sway = Math.sin(t * 0.8 + tr.ph) * 3 * k;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  // ствол
+  ctx.strokeStyle = mix([42, 32, 46], [107, 74, 40], k);
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(bend * 30, -55, bend * 55 + sway * 0.4, -105);
+  ctx.stroke();
+  if (tr.kind === 'spruce') {
+    // ель: тёмно-лиловая → изумрудная
+    ctx.fillStyle = mix([46, 34, 56], [42, 110, 58], k);
+    for (let l = 0; l < 3; l++) {
+      const w = (66 - l * 16) * tr.crown, yy = -70 - l * 34;
+      ctx.beginPath();
+      ctx.moveTo(bend * 40 + sway - w, yy);
+      ctx.lineTo(bend * 40 + sway, yy - 52);
+      ctx.lineTo(bend * 40 + sway + w, yy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else {
+    // мёртвые ветки-когти тают, крона распускается
+    if (k < 0.95) {
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#241a2c';
+      for (const [dx, dy, ex, ey] of [[-8, -70, -52, -108], [6, -85, 44, -128], [0, -100, -20, -150]]) {
+        ctx.beginPath();
+        ctx.moveTo(bend * 30 + dx, dy);
+        ctx.lineTo(bend * 50 + ex, ey);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (k > 0.03) {
+      const cr = 46 * tr.crown * (0.35 + 0.65 * k);
+      const cx2 = bend * 55 + sway, cy2 = -115;
+      ctx.fillStyle = mix([50, 38, 60], [74, 143, 58], k);
+      for (const [ox, oy, rr] of [[0, 0, 1], [-0.75, 0.35, 0.72], [0.75, 0.4, 0.7], [0, -0.6, 0.62]]) {
+        ctx.beginPath();
+        ctx.arc(cx2 + ox * cr, cy2 + oy * cr, cr * rr, 0, 6.283);
+        ctx.fill();
+      }
+      // солнечные блики на листве
+      if (k > 0.6) {
+        ctx.fillStyle = 'rgba(190,230,120,' + (0.35 * (k - 0.6) / 0.4) + ')';
+        ctx.beginPath();
+        ctx.arc(cx2 - cr * 0.3, cy2 - cr * 0.42, cr * 0.5, 0, 6.283);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawDish(kind, x, y, s, t) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  // блюдо-поднос
+  ctx.fillStyle = '#d8ccb0';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 34, 10, 0, 0, 6.283);
+  ctx.fill();
+  ctx.strokeStyle = '#a89878';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  if (kind === 'potato') {
+    ctx.fillStyle = '#d9a24a';
+    for (const [ox, oy, r] of [[-14, -6, 8], [-2, -10, 9], [11, -5, 8], [4, -3, 7], [-8, -2, 7]]) {
+      ctx.beginPath();
+      ctx.ellipse(ox, oy, r, r * 0.75, 0.3, 0, 6.283);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#f0c060';
+    ctx.beginPath(); ctx.ellipse(-2, -12, 4, 2.5, 0, 0, 6.283); ctx.fill();
+    // пар
+    ctx.strokeStyle = 'rgba(255,255,255,.45)';
+    ctx.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      const ph = t * 2 + i * 2;
+      ctx.beginPath();
+      ctx.moveTo(i * 9, -16);
+      ctx.quadraticCurveTo(i * 9 + Math.sin(ph) * 5, -26, i * 9 + Math.sin(ph + 1) * 6, -36);
+      ctx.stroke();
+    }
+  } else if (kind === 'swan') {
+    // жареный лебедь: золотая тушка и гордая длинная шея
+    ctx.fillStyle = '#c9862e';
+    ctx.beginPath(); ctx.ellipse(2, -9, 20, 11, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#e0a344'; // подрумяненный бок
+    ctx.beginPath(); ctx.ellipse(-1, -13, 13, 5, -0.2, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = '#c9862e';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-14, -12);
+    ctx.quadraticCurveTo(-26, -24, -20, -34);
+    ctx.quadraticCurveTo(-16, -41, -10, -38);
+    ctx.stroke();
+    ctx.fillStyle = '#c9862e';
+    ctx.beginPath(); ctx.arc(-9.5, -38, 4.5, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#8c3c10';
+    ctx.beginPath();
+    ctx.moveTo(-5, -38); ctx.lineTo(2, -36.4); ctx.lineTo(-5, -34.8);
+    ctx.closePath(); ctx.fill();
+    // крылышко и зелень
+    ctx.strokeStyle = '#a86a20'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(6, -10, 9, 2.6, 4.6); ctx.stroke();
+    ctx.fillStyle = '#4a8f3a';
+    for (const ox of [-26, 22, 27]) { ctx.beginPath(); ctx.ellipse(ox, -2, 4, 2, 0, 0, 6.283); ctx.fill(); }
+  } else if (kind === 'goose') {
+    // жареный гусь: круглый, ножки торчат кверху
+    ctx.fillStyle = '#c07828';
+    ctx.beginPath(); ctx.ellipse(0, -11, 19, 13, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#dc9a40';
+    ctx.beginPath(); ctx.ellipse(-2, -15, 12, 6, -0.15, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = '#c07828'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for (const d of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(d * 7, -20);
+      ctx.lineTo(d * 12, -30);
+      ctx.stroke();
+      ctx.fillStyle = '#f5ecd8';
+      ctx.beginPath(); ctx.arc(d * 13, -31.5, 3.4, 0, 6.283); ctx.fill();
+    }
+    ctx.fillStyle = '#c23b30';
+    for (const ox of [-24, 24]) { ctx.beginPath(); ctx.arc(ox, -3, 3, 0, 6.283); ctx.fill(); }
+  } else if (kind === 'pies') {
+    // горка пирогов
+    ctx.fillStyle = '#d9a24a';
+    for (const [ox, oy, w] of [[-13, -7, 13], [12, -7, 13], [0, -16, 14]]) {
+      ctx.beginPath();
+      ctx.ellipse(ox, oy, w, 6.5, 0, 0, 6.283);
+      ctx.fill();
+      ctx.strokeStyle = '#b07a26';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) ctx.arc(ox - w + 4 + i * (w / 2.2), oy + 4, 2.6, 3.4, 6);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#f0c060';
+    ctx.beginPath(); ctx.ellipse(-3, -19, 5, 2.4, 0, 0, 6.283); ctx.fill();
+  } else if (kind === 'wine') {
+    // бутыли и рюмки
+    for (const bx of [-16, -5]) {
+      ctx.fillStyle = '#2c5a2c';
+      ctx.beginPath();
+      ctx.moveTo(bx - 5, -2); ctx.lineTo(bx - 5, -20);
+      ctx.quadraticCurveTo(bx - 5, -25, bx - 2, -26);
+      ctx.lineTo(bx - 2, -34); ctx.lineTo(bx + 2, -34); ctx.lineTo(bx + 2, -26);
+      ctx.quadraticCurveTo(bx + 5, -25, bx + 5, -20);
+      ctx.lineTo(bx + 5, -2);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#8c1f16';
+      ctx.fillRect(bx - 2, -37, 4, 4);
+    }
+    for (const gx of [8, 17, 25]) {
+      ctx.strokeStyle = '#cfe0e8';
+      ctx.lineWidth = 1.4;
+      ctx.fillStyle = 'rgba(140,31,22,.85)';
+      ctx.beginPath(); ctx.moveTo(gx - 4, -14); ctx.lineTo(gx + 4, -14); ctx.lineTo(gx + 2.2, -8); ctx.lineTo(gx - 2.2, -8); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx, -8); ctx.lineTo(gx, -3); ctx.moveTo(gx - 3, -2.6); ctx.lineTo(gx + 3, -2.6); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// монах: ряса, борода, крест; несёт блюдо / кланяется / пляшет
+function drawMonk(m, x, y, s, t, mode) {
+  const bounce = mode === 'dance' ? Math.abs(Math.sin(t * 6.4 + m.ph)) * 9 : mode === 'walk' ? Math.abs(Math.sin(t * 8 + m.ph)) * 4 : 0;
+  const squatK = mode === 'dance' && m.squat ? 0.55 + Math.abs(Math.sin(t * 3.2 + m.ph)) * 0.15 : 1;
+  ctx.save();
+  ctx.translate(x, y - bounce * squatK);
+  ctx.scale(s, s);
+  const sway = mode === 'dance' ? Math.sin(t * 6.4 + m.ph) * 0.1 : 0;
+  ctx.rotate(sway);
+  const bodyH = 52 * squatK;
+  // пляшущие ноги из-под рясы
+  if (mode === 'dance') {
+    ctx.strokeStyle = '#3a2c1a';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    const kick = Math.sin(t * 6.4 + m.ph);
+    ctx.beginPath();
+    ctx.moveTo(-6, -6);
+    ctx.lineTo(-6 + (kick > 0 ? -18 * kick : 0), -2 + (kick > 0 ? -8 * kick : 4));
+    ctx.moveTo(6, -6);
+    ctx.lineTo(6 + (kick < 0 ? -18 * kick : 0), -2 + (kick < 0 ? 8 * kick : 4));
+    ctx.stroke();
+  } else if (mode === 'walk') {
+    ctx.strokeStyle = '#3a2c1a';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    const st = Math.sin(t * 8 + m.ph) * 9;
+    ctx.beginPath();
+    ctx.moveTo(-4, -8); ctx.lineTo(-4 + st, 0);
+    ctx.moveTo(4, -8); ctx.lineTo(4 - st, 0);
+    ctx.stroke();
+  }
+  // ряса
+  ctx.fillStyle = '#4a3826';
+  ctx.beginPath();
+  ctx.moveTo(-16, -4);
+  ctx.quadraticCurveTo(-13, -bodyH * 0.7, -9, -bodyH);
+  ctx.lineTo(9, -bodyH);
+  ctx.quadraticCurveTo(13, -bodyH * 0.7, 16, -4);
+  ctx.closePath();
+  ctx.fill();
+  // пояс-верёвка
+  ctx.strokeStyle = '#c9b47f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-11, -bodyH * 0.55);
+  ctx.lineTo(11, -bodyH * 0.55);
+  ctx.stroke();
+  // крест
+  ctx.strokeStyle = '#e8d9a8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -bodyH * 0.8); ctx.lineTo(0, -bodyH * 0.62);
+  ctx.moveTo(-4, -bodyH * 0.74); ctx.lineTo(4, -bodyH * 0.74);
+  ctx.stroke();
+  // руки
+  ctx.strokeStyle = '#4a3826';
+  ctx.lineWidth = 6.5;
+  ctx.lineCap = 'round';
+  if (mode === 'walk' || mode === 'place') {
+    // несёт блюдо перед собой обеими руками
+    ctx.beginPath();
+    ctx.moveTo(-10, -bodyH + 8); ctx.quadraticCurveTo(-14, -bodyH + 2, -20, -bodyH - 2);
+    ctx.moveTo(10, -bodyH + 8); ctx.quadraticCurveTo(2, -bodyH + 2, -14, -bodyH - 2);
+    ctx.stroke();
+  } else {
+    // пляшет: руки вскинуты и машут
+    const up = Math.sin(t * 6.4 + m.ph);
+    ctx.beginPath();
+    ctx.moveTo(-10, -bodyH + 8);
+    ctx.quadraticCurveTo(-20, -bodyH - 2, -24, -bodyH - 14 - up * 7);
+    ctx.moveTo(10, -bodyH + 8);
+    ctx.quadraticCurveTo(20, -bodyH - 2, 24, -bodyH - 14 + up * 7);
+    ctx.stroke();
+    // платочек в руке
+    ctx.fillStyle = '#e8e0c8';
+    ctx.beginPath();
+    ctx.moveTo(24, -bodyH - 14 + up * 7);
+    ctx.lineTo(30, -bodyH - 6 + up * 7);
+    ctx.lineTo(22, -bodyH - 4 + up * 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // голова с бородой и скуфьёй
+  const hy = -bodyH - 10;
+  ctx.fillStyle = '#e8c49a';
+  ctx.beginPath(); ctx.arc(0, hy, 9, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#b8a888'; // борода
+  ctx.beginPath();
+  ctx.moveTo(-7, hy + 2);
+  ctx.quadraticCurveTo(0, hy + 16, 7, hy + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#2c2418'; // скуфья
+  ctx.beginPath();
+  ctx.arc(0, hy - 3, 9, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  // глаза-улыбка
+  ctx.fillStyle = '#2c2418';
+  ctx.beginPath(); ctx.arc(-3.4, hy - 1, 1.1, 0, 6.283); ctx.arc(3.4, hy - 1, 1.1, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#8c5030';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, hy + 2.6, 3.4, 0.35, 2.8); ctx.stroke();
+  ctx.restore();
+  return bounce;
+}
+
+// богатырь: шлем, красный щит за спиной, поднимает рюмку
+function drawHero(x, y, s, t, litK) {
+  const bounce = Math.abs(Math.sin(t * 3.2)) * 3 * litK;
+  const toastK = clamp01(Math.sin(t * 0.9 - 1.2)) ; // периодически поднимает рюмку
+  ctx.save();
+  ctx.translate(x, y - bounce);
+  ctx.scale(s, s);
+  // ноги
+  ctx.strokeStyle = '#5a3a20';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-8, -10); ctx.lineTo(-9, 0);
+  ctx.moveTo(8, -10); ctx.lineTo(9, 0);
+  ctx.stroke();
+  // кольчуга-рубаха
+  ctx.fillStyle = '#8c1f16';
+  ctx.beginPath();
+  ctx.moveTo(-17, -8);
+  ctx.quadraticCurveTo(-15, -46, -11, -56);
+  ctx.lineTo(11, -56);
+  ctx.quadraticCurveTo(15, -46, 17, -8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#ffd76e'; // пояс
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-14, -26); ctx.lineTo(14, -26); ctx.stroke();
+  // левая рука в бок
+  ctx.strokeStyle = '#8c1f16';
+  ctx.lineWidth = 7.5;
+  ctx.beginPath();
+  ctx.moveTo(-11, -48);
+  ctx.quadraticCurveTo(-22, -40, -16, -28);
+  ctx.stroke();
+  // правая рука с рюмкой: то у груди, то вскинута «УРА!»
+  const hx = 14 + toastK * 12, hy2 = -44 - toastK * 26;
+  ctx.beginPath();
+  ctx.moveTo(11, -48);
+  ctx.quadraticCurveTo(20, -46, hx, hy2);
+  ctx.stroke();
+  // рюмка в руке
+  ctx.strokeStyle = '#cfe0e8';
+  ctx.lineWidth = 1.6;
+  ctx.fillStyle = 'rgba(140,31,22,.9)';
+  ctx.beginPath();
+  ctx.moveTo(hx - 4.6, hy2 - 12); ctx.lineTo(hx + 4.6, hy2 - 12); ctx.lineTo(hx + 2.4, hy2 - 5); ctx.lineTo(hx - 2.4, hy2 - 5);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hx, hy2 - 5); ctx.lineTo(hx, hy2 - 1); ctx.moveTo(hx - 3.4, hy2); ctx.lineTo(hx + 3.4, hy2); ctx.stroke();
+  // голова
+  ctx.fillStyle = '#e8c49a';
+  ctx.beginPath(); ctx.arc(0, -66, 10.5, 0, 6.283); ctx.fill();
+  // русая борода
+  ctx.fillStyle = '#b8935a';
+  ctx.beginPath();
+  ctx.moveTo(-8, -63);
+  ctx.quadraticCurveTo(0, -50, 8, -63);
+  ctx.closePath(); ctx.fill();
+  // улыбка и глаза
+  ctx.fillStyle = '#2c2418';
+  ctx.beginPath(); ctx.arc(-3.8, -68, 1.3, 0, 6.283); ctx.arc(3.8, -68, 1.3, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#8c5030'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(0, -64, 4, 0.4, 2.75); ctx.stroke();
+  // шлем с шишаком
+  ctx.fillStyle = '#b8bcc2';
+  ctx.beginPath();
+  ctx.arc(0, -70, 10.5, Math.PI, 0);
+  ctx.quadraticCurveTo(6, -84, 0, -88);
+  ctx.quadraticCurveTo(-6, -84, -10.5, -70);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd76e';
+  ctx.beginPath(); ctx.arc(0, -88, 2.4, 0, 6.283); ctx.fill();
+  ctx.restore();
+  return toastK;
+}
+
+function drawTable() {
+  ctx.fillStyle = '#7a5a34';
+  ctx.fillRect(TABLE.x - TABLE.w / 2 + 24, TABLE.y, 12, TABLE.legH);
+  ctx.fillRect(TABLE.x + TABLE.w / 2 - 36, TABLE.y, 12, TABLE.legH);
+  ctx.fillStyle = '#9a7444';
+  ctx.fillRect(TABLE.x - TABLE.w / 2, TABLE.y - TABLE.h, TABLE.w, TABLE.h);
+  ctx.fillStyle = '#b08a54';
+  ctx.fillRect(TABLE.x - TABLE.w / 2, TABLE.y - TABLE.h, TABLE.w, 4);
+  // скатерть-рушник по центру
+  ctx.fillStyle = '#e8e0c8';
+  ctx.fillRect(TABLE.x - 60, TABLE.y - TABLE.h - 1, 120, TABLE.h + 3);
+  ctx.fillStyle = '#c23b30';
+  ctx.fillRect(TABLE.x - 60, TABLE.y - 3, 120, 2);
+}
+
+// ---------- музыка: весёлый плясовой наигрыш (WebAudio, всё синтез) ----------
+let AC = null, masterGain = null, muted = false;
+const BPM = 152, EIGHTH = 60 / BPM / 2, BAR = EIGHTH * 8;
+// мелодия ля-мажорной плясовой, 8 тактов по 8 восьмых (0 — пауза)
+const MEL = [
+  [76, 76, 74, 73, 74, 76, 78, 76],
+  [81, 78, 76, 74, 73, 71, 73, 69],
+  [76, 76, 74, 73, 74, 76, 78, 76],
+  [81, 78, 76, 74, 73, 74, 76, 0],
+  [69, 71, 73, 74, 76, 76, 78, 78],
+  [81, 81, 80, 78, 76, 74, 73, 71],
+  [74, 73, 71, 69, 71, 73, 74, 76],
+  [73, 71, 69, 68, 69, 0, 69, 0],
+];
+const BASSROOT = [45, 45, 45, 40, 45, 38, 40, 45]; // A2 A A E | A D2 E A
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+function noteOsc(type, freq, t0, dur, vol, filterHz) {
+  const o = AC.createOscillator();
+  o.type = type;
+  o.frequency.value = freq;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  let node = g;
+  if (filterHz) {
+    const f = AC.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = filterHz;
+    g.connect(f);
+    node = f;
+  }
+  o.connect(g);
+  node.connect(masterGain);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+let noiseBuf = null;
+function noiseHit(t0, dur, vol, hp) {
+  const src = AC.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = AC.createBiquadFilter();
+  f.type = 'highpass';
+  f.frequency.value = hp;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(masterGain);
+  src.start(t0);
+  src.stop(t0 + dur + 0.02);
+}
+function scheduleBar(bar, t0) {
+  const mel = MEL[bar % MEL.length];
+  const root = BASSROOT[bar % BASSROOT.length];
+  for (let i = 0; i < 8; i++) {
+    const ts = t0 + i * EIGHTH;
+    const m = mel[i];
+    if (m) {
+      // «балалайка»: два расстроенных квадратика со щипковой огибающей
+      noteOsc('square', midiHz(m), ts, 0.16, 0.055, 2000);
+      noteOsc('square', midiHz(m) * 1.004, ts, 0.14, 0.04, 1800);
+    }
+    // бубенцы на каждую восьмую, звончее на сильную долю
+    noiseHit(ts, 0.04, i % 2 === 0 ? 0.05 : 0.028, 6000);
+  }
+  for (let q = 0; q < 4; q++) {
+    const ts = t0 + q * EIGHTH * 2;
+    // бас: раз-два, корень-квинта
+    noteOsc('triangle', midiHz(q % 2 === 0 ? root : root + 7), ts, 0.24, 0.14);
+    // аккордовый «щип» на слабую долю
+    noteOsc('sawtooth', midiHz(root + 16), ts + EIGHTH, 0.1, 0.022, 900);
+    noteOsc('sawtooth', midiHz(root + 19), ts + EIGHTH, 0.1, 0.022, 900);
+    if (q === 1 || q === 3) noiseHit(ts, 0.09, 0.075, 2400); // ложки
+  }
+}
+let nextBarT = 0, barIdx = 0, schedTimer = null;
+function startMusic() {
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = AC.createGain();
+  masterGain.gain.value = 0.9;
+  masterGain.connect(AC.destination);
+  noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.3, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  nextBarT = AC.currentTime + 0.1;
+  barIdx = 0;
+  schedTimer = setInterval(() => {
+    while (nextBarT < AC.currentTime + 0.6) {
+      scheduleBar(barIdx++, nextBarT);
+      nextBarT += BAR;
+    }
+  }, 120);
+}
+
+// ---------- главный цикл ----------
+let t0 = 0, started = false;
+function restart() {
+  t0 = performance.now() / 1000;
+  floaters.length = 0;
+  sparks.length = 0;
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (!started) return;
+  const t = performance.now() / 1000 - t0;
+  const lightK = ease(clamp01((t - 1) / 6)); // общий рассвет
+  const sweepR = Math.max(0, (t - 0.8) * 340); // волна света из середины поляны
+  const beat = AC ? ((AC.currentTime / EIGHTH) % 2) : 0;
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  // виртуальная сцена по центру окна
+  ctx.setTransform(S, 0, 0, S, (W - 1280 * S) / 2, (H - 720 * S) / 2);
+  // за краями сцены — цвет неба/земли
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = mix([8, 10, 7], [126, 194, 226], lightK);
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // небо
+  const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+  sky.addColorStop(0, mix([8, 10, 7], [116, 190, 228], lightK));
+  sky.addColorStop(1, mix([16, 20, 13], [212, 236, 188], lightK));
+  ctx.fillStyle = sky;
+  ctx.fillRect(-200, -100, 1700, GROUND_Y + 100);
+
+  // солнце всходит
+  if (lightK > 0.02) {
+    const sunY = lerp(GROUND_Y + 80, 120, ease(clamp01((t - 1.5) / 7)));
+    const sunX = 1020;
+    ctx.save();
+    ctx.translate(sunX, sunY);
+    ctx.rotate(t * 0.12);
+    ctx.strokeStyle = 'rgba(255,215,110,' + 0.5 * lightK + ')';
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 12; i++) {
+      ctx.rotate(Math.PI / 6);
+      ctx.beginPath();
+      ctx.moveTo(58, 0);
+      ctx.lineTo(78 + Math.sin(t * 3 + i) * 6, 0);
+      ctx.stroke();
+    }
+    ctx.rotate(-t * 0.24);
+    ctx.fillStyle = '#ffd76e';
+    ctx.beginPath(); ctx.arc(0, 0, 46, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#ffe9a8';
+    ctx.beginPath(); ctx.arc(-10, -10, 30, 0, 6.283); ctx.fill();
+    // солнце улыбается
+    ctx.fillStyle = '#c9862e';
+    ctx.beginPath(); ctx.arc(-14, -6, 4, 0, 6.283); ctx.arc(12, -6, 4, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = '#c9862e'; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(0, 4, 16, 0.35, 2.8); ctx.stroke();
+    ctx.restore();
+  }
+
+  // облачка плывут
+  if (lightK > 0.25) {
+    ctx.fillStyle = 'rgba(255,255,255,' + 0.75 * lightK + ')';
+    for (let i = 0; i < 4; i++) {
+      const cx2 = ((i * 380 + t * 16) % 1500) - 110;
+      const cy2 = 70 + i * 52;
+      for (const [ox, oy, r] of [[0, 0, 30], [26, 6, 22], [-26, 8, 20], [8, -12, 20]]) {
+        ctx.beginPath();
+        ctx.ellipse(cx2 + ox, cy2 + oy, r, r * 0.62, 0, 0, 6.283);
+        ctx.fill();
+      }
+    }
+  }
+
+  // земля: тьма → трава волной света
+  ctx.fillStyle = mix([18, 15, 11], [127, 174, 79], lightK);
+  ctx.fillRect(-200, GROUND_Y - 130, 1700, 400);
+  // волна света расходится по земле
+  if (sweepR > 10 && lightK < 0.999) {
+    ctx.strokeStyle = 'rgba(255,240,180,' + 0.5 * (1 - lightK) + ')';
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.ellipse(640, 610, sweepR, sweepR * 0.34, 0, 0, 6.283);
+    ctx.stroke();
+  }
+
+  // цветы распускаются там, где прошёл свет
+  for (const f of flowers) {
+    const kf = clamp01((sweepR - Math.hypot(f.x - 640, (f.y - 610) * 2.6)) / 160);
+    if (kf <= 0.01) continue;
+    const fs = f.s * kf;
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.strokeStyle = '#4a8f3a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -9 * fs); ctx.stroke();
+    ctx.fillStyle = f.hue;
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * 6.283 + f.ph + Math.sin(t + f.ph) * 0.08;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a) * 3.6 * fs, -9 * fs + Math.sin(a) * 3.6 * fs, 2.6 * fs, 1.7 * fs, a, 0, 6.283);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffd76e';
+    ctx.beginPath(); ctx.arc(0, -9 * fs, 1.8 * fs, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+
+  // всё живое рисуем с сортировкой по y (глубина)
+  const draws = [];
+  for (const tr of trees) {
+    const kt = clamp01((sweepR - Math.hypot(tr.x - 640, (tr.y - 610) * 2.2)) / 260) * lightK * 1.35;
+    draws.push({ y: tr.y, fn: () => drawTree(tr, clamp01(kt), t) });
+  }
+  // стол с угощением
+  draws.push({ y: TABLE.y + TABLE.legH - 4, fn: () => {
+    drawTable();
+    for (const m of monks) if (m.placedK >= 1) drawDish(m.dish, SLOTS[m.slot].x, SLOTS[m.slot].y, 1.15, t);
+  }});
+  // богатырь
+  draws.push({ y: 640, fn: () => {
+    const toastK = drawHero(380, 640, 1.5, t, lightK);
+    if (toastK > 0.985 && Math.random() < 0.08) {
+      floater(380, 500, 'УРА!', '#ffd76e', 26);
+      for (let i = 0; i < 4; i++) spark(380 + (Math.random() - 0.5) * 60, 520, '#ffd76e');
+    }
+  }});
+
+  // монахи: пришёл → поставил блюдо → пляшет в хороводе
+  for (const m of monks) {
+    const mt = t - m.tStart;
+    m.placedK = m.placedK || 0;
+    if (mt < 0) continue;
+    const slotX = SLOTS[m.slot].x + 26, slotY = TABLE.y + 26 + m.slot * 3;
+    let x, y, mode, sc = 1.35;
+    const walkDur = (1330 - slotX) / 150;
+    if (mt < walkDur) {
+      // идёт от правого края к столу с блюдом в руках
+      x = lerp(1330, slotX, mt / walkDur);
+      y = slotY;
+      mode = 'walk';
+    } else if (mt < walkDur + 1.1) {
+      x = slotX; y = slotY;
+      mode = 'place';
+      m.placedK = clamp01((mt - walkDur) / 0.5);
+      if (!m.thanked && m.placedK >= 1) {
+        m.thanked = true;
+        floater(slotX, slotY - 120, 'Отведай, богатырь!', '#e8d9a8', 15);
+        for (let i = 0; i < 6; i++) spark(SLOTS[m.slot].x, SLOTS[m.slot].y - 20, '#ffd76e');
+      }
+    } else {
+      // в хоровод! кружат вокруг поляны справа
+      const k = clamp01((mt - walkDur - 1.1) / 1.4);
+      const ang = m.danceAng + t * 0.9;
+      const dx2 = RING.x + Math.cos(ang) * RING.rx;
+      const dy2 = RING.y + Math.sin(ang) * RING.ry + 40;
+      x = lerp(slotX, dx2, ease(k));
+      y = lerp(slotY, dy2, ease(k));
+      mode = k > 0.6 ? 'dance' : 'walk';
+      sc = 1.35 * (0.86 + 0.14 * clamp01((y - RING.y - 8) / RING.ry / 2 + 0.5));
+      // над плясунами вьются нотки
+      if (mode === 'dance' && Math.random() < 0.012)
+        floater(x, y - 110, Math.random() < 0.5 ? '♪' : '♫', '#a0e8ff', 18);
+    }
+    const carried = mode === 'walk' && m.placedK < 1;
+    draws.push({ y, fn: ((mm, xx, yy, md, scc, car) => () => {
+      drawMonk(mm, xx, yy, scc, t, md);
+      // блюдо в руках (пока не поставлено): плывёт из рук на стол
+      if (car) drawDish(mm.dish, xx - 24, yy - 74 * scc / 1.35, 1, t);
+      else if (md === 'place' && mm.placedK < 1)
+        drawDish(mm.dish, lerp(xx - 24, SLOTS[mm.slot].x, ease(mm.placedK)), lerp(yy - 74, SLOTS[mm.slot].y, ease(mm.placedK)), lerp(1, 1.15, mm.placedK), t);
+    })(m, x, y, mode, sc, carried) });
+  }
+  draws.sort((a, b) => a.y - b.y);
+  for (const d of draws) d.fn();
+
+  // птицы
+  for (const b of birds) {
+    if (t < b.born) continue;
+    const bx = ((b.x + (t - b.born) * b.v) % 1500) - 110;
+    const by = b.y + Math.sin(t * 2 + b.ph) * 10;
+    ctx.strokeStyle = 'rgba(44,36,24,.8)';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    const w = Math.sin(t * 9 + b.ph) * 5;
+    ctx.beginPath();
+    ctx.moveTo(bx - 8, by - w);
+    ctx.quadraticCurveTo(bx, by + 3, bx + 8, by - w);
+    ctx.stroke();
+  }
+  // бабочки
+  for (const bf of butterflies) {
+    if (t < bf.born) continue;
+    const a = t * 0.7 + bf.ph;
+    const bx = bf.cx + Math.cos(a) * bf.r, by = bf.cy + Math.sin(a * 1.7) * bf.r * 0.4;
+    const flap = Math.sin(t * 14 + bf.ph) * 0.6 + 0.7;
+    ctx.fillStyle = bf.col;
+    ctx.beginPath();
+    ctx.ellipse(bx - 3 * flap, by, 4 * flap, 2.6, -0.5, 0, 6.283);
+    ctx.ellipse(bx + 3 * flap, by, 4 * flap, 2.6, 0.5, 0, 6.283);
+    ctx.fill();
+  }
+
+  // искры и надписи
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i];
+    p.life -= 1 / 60;
+    p.x += p.vx / 60; p.y += p.vy / 60; p.vy += 40 / 60;
+    if (p.life <= 0) { sparks.splice(i, 1); continue; }
+    ctx.globalAlpha = Math.min(1, p.life);
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  // волшебные искорки в воздухе
+  if (lightK > 0.5 && Math.random() < 0.3) spark(Math.random() * 1280, 300 + Math.random() * 260, Math.random() < 0.5 ? '#ffd76e' : '#a0e8ff');
+
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i];
+    f.life -= 1 / 60;
+    f.y -= 26 / 60;
+    if (f.life <= 0) { floaters.splice(i, 1); continue; }
+    ctx.globalAlpha = Math.min(1, f.life * 1.6);
+    ctx.font = 'bold ' + f.size + 'px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = f.col;
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 6;
+    ctx.fillText(f.txt, f.x, f.y);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  // крупные титры
+  for (const bn of BANNERS) {
+    const bt = t - bn.t;
+    if (bt < 0 || bt > bn.dur) continue;
+    const a = Math.min(1, bt * 2.5, (bn.dur - bt) * 1.6);
+    ctx.globalAlpha = a;
+    ctx.font = 'bold 46px Georgia';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = bn.col;
+    const pulse = 1 + Math.sin(beat * Math.PI) * 0.02;
+    ctx.save();
+    ctx.translate(640, 120);
+    ctx.scale(pulse, pulse);
+    ctx.fillText(bn.txt, 0, 0);
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+}
+requestAnimationFrame(frame);
+
+document.getElementById('startBtn').onclick = () => {
+  document.getElementById('overlay').style.display = 'none';
+  started = true;
+  restart();
+  startMusic();
+};
+addEventListener('keydown', (e) => {
+  if (e.code === 'KeyM' && masterGain) {
+    muted = !muted;
+    masterGain.gain.value = muted ? 0 : 0.9;
+  }
+  if (e.code === 'KeyR' && started) {
+    for (const m of monks) { m.placedK = 0; m.thanked = false; }
+    restart();
+  }
+  if (e.code === 'Escape') location.href = 'index.html';
+});
+</script>
+</body>
+</html>

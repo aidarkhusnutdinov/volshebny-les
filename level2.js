@@ -1267,8 +1267,16 @@ function l2Victory() {
     ' обратно к свету. Двум подвигам твоим конца-краю нет — гусляры сложат две песни.</p>' +
     '<p style="text-align:center;color:#ffd76e">Уровень ' + player.level +
     ' · соратников: ' + player.pets.length + '</p>',
-    'НОВЫЙ ПОХОД',
+    '▶ СМОТРЕТЬ ФИНАЛ',
   );
+  // главная кнопка ведёт в финальный мультик; ниже — запасная «новый поход»
+  const btn = document.getElementById('startBtn');
+  btn.onclick = () => { location.href = 'мультик-финал.html'; };
+  const again = document.createElement('button');
+  again.textContent = 'НОВЫЙ ПОХОД';
+  again.style.cssText = 'display:block;margin:10px auto 0;font-size:14px;padding:8px 24px;opacity:.75;';
+  again.onclick = startGame;
+  btn.parentNode.appendChild(again);
 }
 
 function l2Objective() {
