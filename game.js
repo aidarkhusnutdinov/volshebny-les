@@ -6,8 +6,16 @@ const ctx = canvas.getContext("2d");
 let VW = 0,
   VH = 0;
 function resize() {
-  VW = canvas.width = window.innerWidth;
-  VH = canvas.height = window.innerHeight;
+  // на сенсорных устройствах рисуем с учётом devicePixelRatio (чёткость),
+  // на десктопе dpr=1 — поведение в точности прежнее
+  const dpr = window.IS_TOUCH ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+  VW = window.innerWidth;
+  VH = window.innerHeight;
+  canvas.width = VW * dpr;
+  canvas.height = VH * dpr;
+  canvas.style.width = VW + "px";
+  canvas.style.height = VH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -1421,6 +1429,9 @@ function menuChoose() {
 
 function openMenu(clientX, clientY, title, options, target) {
   AudioSys.menu();
+  // на таче — явный пункт закрытия (тап мимо меню тоже закрывает, но так понятнее);
+  // concat, чтобы не портить массив вызывающего повторным открытием
+  if (window.IS_TOUCH) options = options.concat({ label: "✕ закрыть", fn: () => {} });
   menuTarget = target;
   menuOptions = options;
   menuSel = 0;
@@ -1432,8 +1443,12 @@ function openMenu(clientX, clientY, title, options, target) {
     '<input type="text" placeholder="…или впиши своё слово" id="ctxinput">';
   menuEl.innerHTML = html;
   menuEl.style.display = "block";
-  menuEl.style.left = Math.min(clientX, VW - 230) + "px";
-  menuEl.style.top = Math.min(clientY, VH - 60 - options.length * 34) + "px";
+  // тач-меню шире и с высокими пунктами — клампим с их размерами
+  const mw = window.IS_TOUCH ? 264 : 230;
+  const oh = window.IS_TOUCH ? 46 : 34;
+  menuEl.style.left = Math.max(4, Math.min(clientX, VW - mw)) + "px";
+  menuEl.style.top =
+    Math.max(4, Math.min(clientY, VH - 60 - options.length * oh)) + "px";
   menuEl.querySelectorAll(".opt").forEach((el) => {
     el.onclick = () => {
       const o = options[+el.dataset.i];
@@ -1476,7 +1491,9 @@ function openMenu(clientX, clientY, title, options, target) {
     if (ev.key === "Escape") closeMenu();
   };
   inp.onmousedown = (ev) => ev.stopPropagation();
-  setTimeout(() => inp.focus(), 30);
+  // на таче автофокус вызывал бы экранную клавиатуру поверх меню —
+  // игрок тапает поле сам, когда хочет вписать слово
+  if (!window.IS_TOUCH) setTimeout(() => inp.focus(), 30);
 }
 
 function customWord(word, target, title) {
@@ -3217,6 +3234,11 @@ function update(dt) {
     if (keys.KeyS || keys.ArrowDown) my += 1;
     if (keys.KeyA || keys.ArrowLeft) mx -= 1;
     if (keys.KeyD || keys.ArrowRight) mx += 1;
+    if (window.touchMove) {
+      // виртуальный джойстик (touch.js); window.-гард — dev-тесты живут без него
+      mx += window.touchMove.x;
+      my += window.touchMove.y;
+    }
   }
   if (
     player.paralyzed <= 0 &&
