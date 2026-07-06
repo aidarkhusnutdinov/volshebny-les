@@ -174,6 +174,10 @@ if (window.IS_TOUCH) document.documentElement.classList.add("touch");
   html.touch #mapOverlay #objective{display:block;position:static;max-width:none;}
   html.touch #mapOverlay #stats{display:block;margin:0;padding:6px 10px;background:rgba(16,12,6,.8);border:1px solid #55431f;border-radius:8px;white-space:normal;}
   html.touch #banner{top:calc(var(--tophud) + 8px);font-size:14px;letter-spacing:.5px;max-width:92vw;padding:5px 14px;box-sizing:border-box;background:rgba(10,8,4,.78);border:1px solid #55431f;border-radius:8px;text-shadow:0 1px 2px #000;}
+  /* обычные тосты на таче — такая же компактная плашка, ярусом ниже баннера,
+     а не крупная рамка посреди боя */
+  html.touch #toast{top:calc(var(--tophud) + 44px);font-size:12.5px;font-weight:normal;max-width:92vw;padding:4px 12px;box-sizing:border-box;background:rgba(10,8,4,.72);border:1px solid #55431f;border-radius:8px;box-shadow:none;text-shadow:0 1px 2px #000;}
+  html.touch #toast2{bottom:auto;top:calc(var(--tophud) + 76px);font-size:11.5px;max-width:88vw;padding:3px 10px;box-sizing:border-box;}
 </style>
 </head>
 <body>

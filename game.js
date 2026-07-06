@@ -404,7 +404,11 @@ function toast(msg, color) {
   toastEl.style.color = color || "#f5e6b8";
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+  // на телефоне тост — маленькая плашка сверху, держим короче, чтоб не мешала бою
+  toastTimer = setTimeout(
+    () => toastEl.classList.remove("show"),
+    window.IS_TOUCH ? 2000 : 2600,
+  );
 }
 let toast2Timer = null;
 // тихое уведомление внизу по центру — для неважных событий (вороны, стоны, огоньки)
