@@ -48,7 +48,11 @@
   #overlay.scene-light{background:rgba(8,14,4,.28);}
   #overlay.scene-dark{background:rgba(3,2,8,.40);}
   #overlay .box{position:relative;max-width:660px;padding:38px 52px;text-align:center;}
-  #overlay.scene-light .box{box-shadow:0 12px 44px rgba(0,0,0,.75),inset 0 0 22px rgba(0,0,0,.5);}
+  #overlay.scene-light .box{background:linear-gradient(180deg,rgba(56,74,34,.58),rgba(34,48,22,.66));border-color:#a8c46a;backdrop-filter:blur(3px);box-shadow:0 12px 44px rgba(20,40,10,.55),inset 0 0 26px rgba(255,244,190,.08);}
+  #overlay.scene-light h1{color:#fdf6d8;text-shadow:0 3px 0 #2c4014,0 6px 18px rgba(10,25,5,.85);}
+  #overlay.scene-light h2{color:#ffe89a;}
+  #overlay.scene-light p{color:#f0e8c6;}
+  #overlay.scene-light .goldword{color:#ffe27a;}
   #overlay.scene-dark .box{border-color:#4a3560;background:linear-gradient(180deg,rgba(20,14,26,.95),rgba(10,7,14,.95));box-shadow:0 12px 44px rgba(0,0,0,.85),inset 0 0 26px rgba(18,8,30,.65);}
   #overlay.scene-dark h1{color:#d9c8f0;text-shadow:0 3px 0 #1c1030,0 6px 22px #000;}
   #overlay.scene-dark h2{color:#9a7fc0;}
@@ -98,6 +102,9 @@
         <stop offset="0" stop-color="#9cc873"/><stop offset=".5" stop-color="#5d8f3e"/><stop offset="1" stop-color="#2e5220"/>
       </linearGradient>
       <radialGradient id="sunL"><stop offset="0" stop-color="#fff3b8" stop-opacity=".95"/><stop offset="1" stop-color="#ffeaa0" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glowC"><stop offset="0" stop-color="#a0e8ff" stop-opacity=".55"/><stop offset="1" stop-color="#a0e8ff" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glowG"><stop offset="0" stop-color="#ffe9a0" stop-opacity=".6"/><stop offset="1" stop-color="#ffe9a0" stop-opacity="0"/></radialGradient>
+      <filter id="blurL"><feGaussianBlur stdDeviation="10"/></filter>
     </defs>
     <rect width="1280" height="720" fill="url(#skyL)"/>
     <circle cx="600" cy="150" r="300" fill="url(#sunL)"/>
@@ -107,19 +114,13 @@
     <path d="M0,430 Q120,380 240,415 T480,410 T720,420 T960,405 T1280,420 L1280,720 L0,720 Z" fill="#3b6427" opacity=".8"/>
     <rect y="500" width="1280" height="220" fill="#47762c"/>
     <path d="M0,505 Q320,485 640,505 T1280,500 L1280,720 L0,720 Z" fill="#3c6423"/>
-    <!-- белый олень на опушке -->
-    <g transform="translate(210,595) scale(1.2)" fill="#f2ecd6" opacity=".92">
-      <ellipse cx="0" cy="0" rx="23" ry="10.5"/>
-      <path d="M14,-6 Q23,-13 24,-27 L31,-27 Q30,-11 24,-1 Z"/>
-      <ellipse cx="29" cy="-29" rx="7" ry="5"/>
-      <path d="M35,-30 q6,1 7,3 q-3,2 -8,1 Z"/>
-      <path d="M25,-33 q-4,-4 -4,-8 q4,1 6,6 Z"/>
-      <path d="M28,-34 q-3,-9 -11,-12 M22,-40 q-5,-1 -8,-5 M28,-34 q0,-9 5,-14 M31,-42 q4,-3 4,-8 M32,-33 q6,-6 13,-7" stroke="#f2ecd6" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <rect x="-19" y="5" width="3.6" height="25" rx="1.8" transform="rotate(4 -17 5)"/>
-      <rect x="-9" y="7" width="3.6" height="23" rx="1.8" transform="rotate(-3 -7 7)"/>
-      <rect x="7" y="7" width="3.6" height="23" rx="1.8" transform="rotate(3 9 7)"/>
-      <rect x="15" y="5" width="3.6" height="25" rx="1.8" transform="rotate(-5 17 5)"/>
-      <path d="M-22,-5 q-5,-1 -7,-5 l4,-1 q3,3 5,4 z"/>
+    <!-- волшебное свечение, разлитое по чаще -->
+    <g filter="url(#blurL)">
+      <ellipse cx="240" cy="430" rx="130" ry="55" fill="url(#glowC)"/>
+      <ellipse cx="1050" cy="415" rx="140" ry="60" fill="url(#glowC)"/>
+      <ellipse cx="150" cy="560" rx="120" ry="45" fill="url(#glowG)"/>
+      <ellipse cx="1140" cy="560" rx="130" ry="50" fill="url(#glowG)"/>
+      <ellipse cx="640" cy="690" rx="330" ry="60" fill="url(#glowG)" opacity=".7"/>
     </g>
     <!-- вековые дубы по краям -->
     <g>
@@ -135,22 +136,175 @@
       <circle cx="1262" cy="235" r="88" fill="#498232"/><circle cx="1195" cy="115" r="70" fill="#57993c"/>
       <circle cx="1130" cy="160" r="16" fill="#74b54a" opacity=".8"/><circle cx="1240" cy="140" r="13" fill="#74b54a" opacity=".7"/>
     </g>
+    <!-- ёлки: по краям и на опушке -->
     <polygon points="330,560 395,410 460,560" fill="#2f5b26"/><polygon points="345,500 395,375 445,500" fill="#377031"/>
     <polygon points="950,570 1010,430 1070,570" fill="#2f5b26"/><polygon points="965,515 1010,395 1055,515" fill="#377031"/>
+    <polygon points="200,540 255,420 310,540" fill="#2f5b26"/><polygon points="212,490 255,390 298,490" fill="#377031"/>
+    <polygon points="0,560 45,440 95,560" fill="#2f5b26"/><polygon points="8,510 45,410 85,510" fill="#377031"/>
+    <polygon points="1150,545 1205,425 1260,545" fill="#2f5b26"/><polygon points="1162,495 1205,395 1248,495" fill="#377031"/>
+    <polygon points="1240,600 1280,480 1280,600" fill="#35652a"/>
+    <!-- драконы в небе (окрас как в игре) -->
+    <g transform="translate(175,95) scale(1.35)">
+      <path d="M-14,-2 Q-32,3 -42,12 Q-30,7 -22,5 Z" fill="#4a7a4e"/>
+      <ellipse cx="0" cy="0" rx="16" ry="7" fill="#4a7a4e"/>
+      <ellipse cx="1" cy="3" rx="12" ry="3.6" fill="#c9d6a0"/>
+      <path d="M-4,-5 L-18,-26 L10,-9 Z" fill="#3a5e3d"/>
+      <path d="M-2,-5 L8,-20 L14,-6 Z" fill="#3a5e3d" opacity=".85"/>
+      <circle cx="17" cy="-4" r="5.5" fill="#4a7a4e"/>
+      <path d="M21,-6 q7,0 9,3 l-9,2 Z" fill="#4a7a4e"/>
+      <path d="M-8,-7 l3,-4 2,4 3,-4 2,4 3,-4 2,4" stroke="#e8622a" stroke-width="2" fill="none"/>
+      <circle cx="18" cy="-6" r="1.3" fill="#14100a"/>
+      <path d="M30,-3 q6,1 8,4" stroke="#ffb84a" stroke-width="2.5" fill="none" stroke-linecap="round" class="tw"/>
+    </g>
+    <g transform="translate(1085,80) scale(-1.15,1.15)">
+      <path d="M-14,-2 Q-32,3 -42,12 Q-30,7 -22,5 Z" fill="#7a3e3e"/>
+      <ellipse cx="0" cy="0" rx="16" ry="7" fill="#7a3e3e"/>
+      <ellipse cx="1" cy="3" rx="12" ry="3.6" fill="#d6b09a"/>
+      <path d="M-4,-5 L-18,-26 L10,-9 Z" fill="#5e2e2e"/>
+      <path d="M-2,-5 L8,-20 L14,-6 Z" fill="#5e2e2e" opacity=".85"/>
+      <circle cx="17" cy="-4" r="5.5" fill="#7a3e3e"/>
+      <path d="M21,-6 q7,0 9,3 l-9,2 Z" fill="#7a3e3e"/>
+      <path d="M-8,-7 l3,-4 2,4 3,-4 2,4 3,-4 2,4" stroke="#e8b23a" stroke-width="2" fill="none"/>
+      <circle cx="18" cy="-6" r="1.3" fill="#14100a"/>
+    </g>
+    <path d="M620,32 q6,-8 12,0 q7,-7 13,1 q-7,2 -12,1 q-6,2 -13,-2 Z" fill="#3d3d5e" opacity=".7"/>
+    <!-- белый олень на опушке -->
+    <g transform="translate(210,595) scale(1.2)" fill="#f2ecd6" opacity=".92">
+      <ellipse cx="0" cy="0" rx="23" ry="10.5"/>
+      <path d="M14,-6 Q23,-13 24,-27 L31,-27 Q30,-11 24,-1 Z"/>
+      <ellipse cx="29" cy="-29" rx="7" ry="5"/>
+      <path d="M35,-30 q6,1 7,3 q-3,2 -8,1 Z"/>
+      <path d="M25,-33 q-4,-4 -4,-8 q4,1 6,6 Z"/>
+      <path d="M28,-34 q-3,-9 -11,-12 M22,-40 q-5,-1 -8,-5 M28,-34 q0,-9 5,-14 M31,-42 q4,-3 4,-8 M32,-33 q6,-6 13,-7" stroke="#f2ecd6" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <rect x="-19" y="5" width="3.6" height="25" rx="1.8" transform="rotate(4 -17 5)"/>
+      <rect x="-9" y="7" width="3.6" height="23" rx="1.8" transform="rotate(-3 -7 7)"/>
+      <rect x="7" y="7" width="3.6" height="23" rx="1.8" transform="rotate(3 9 7)"/>
+      <rect x="15" y="5" width="3.6" height="25" rx="1.8" transform="rotate(-5 17 5)"/>
+      <path d="M-22,-5 q-5,-1 -7,-5 l4,-1 q3,3 5,4 z"/>
+    </g>
+    <!-- кикимора выглядывает из травы -->
+    <g transform="translate(85,635) scale(1.7)">
+      <path d="M-10,0 Q-8,-22 0,-24 Q8,-22 10,0 Z" fill="#5a6b3a" stroke="rgba(10,15,5,.65)" stroke-width="1"/>
+      <path d="M-7,-20 q-1,10 -2,19 M-3,-22 q-1,11 -1,21 M2,-22 q1,11 1,21 M6,-20 q1,10 2,19" stroke="#46552c" stroke-width="1.6" fill="none"/>
+      <circle cx="0" cy="-19" r="6" fill="#8fae4f"/>
+      <circle cx="-2" cy="-20" r="1.8" fill="#e8f04a"/><circle cx="3" cy="-20" r="1.8" fill="#e8f04a"/>
+      <circle cx="-2" cy="-20" r=".8" fill="#14100a"/><circle cx="3" cy="-20" r=".8" fill="#14100a"/>
+      <path d="M-2,-15 q3,1.5 6,-.5" stroke="#3a4a20" stroke-width="1" fill="none"/>
+    </g>
+    <!-- кабан роет землю -->
+    <g transform="translate(430,693) scale(1.25)">
+      <ellipse cx="0" cy="-12" rx="19" ry="10.5" fill="#5a4430"/>
+      <path d="M-15,-21 l3,-4 3,4 3,-4 3,4 3,-4 3,4" stroke="#3d2c1a" stroke-width="2.5" fill="none"/>
+      <circle cx="16" cy="-10" r="8" fill="#5a4430"/>
+      <path d="M12,-17 l5,-5 2,5 Z" fill="#3d2c1a"/>
+      <ellipse cx="24" cy="-7" rx="4.5" ry="3.2" fill="#8a6f52"/>
+      <path d="M21,-4 q3,3 5,2" stroke="#f2ecd6" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="17" cy="-12" r="1.2" fill="#14100a"/>
+      <rect x="-14" y="-4" width="4" height="9" fill="#4a3826"/><rect x="-5" y="-3" width="4" height="8" fill="#4a3826"/>
+      <rect x="6" y="-3" width="4" height="8" fill="#4a3826"/><rect x="12" y="-4" width="4" height="9" fill="#4a3826"/>
+      <path d="M-18,-14 q-4,-2 -4,-6" stroke="#3d2c1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </g>
+    <!-- заяц столбиком -->
+    <g transform="translate(575,702)">
+      <ellipse cx="0" cy="-8" rx="8.5" ry="10" fill="#b8b4a4"/>
+      <circle cx="0" cy="-20" r="5.5" fill="#b8b4a4"/>
+      <ellipse cx="-3" cy="-30" rx="2.2" ry="7" fill="#b8b4a4" transform="rotate(-8 -3 -30)"/>
+      <ellipse cx="3" cy="-30" rx="2.2" ry="7" fill="#b8b4a4" transform="rotate(8 3 -30)"/>
+      <ellipse cx="-3" cy="-29" rx="1" ry="4.5" fill="#d8a8a8" transform="rotate(-8 -3 -29)"/>
+      <ellipse cx="3" cy="-29" rx="1" ry="4.5" fill="#d8a8a8" transform="rotate(8 3 -29)"/>
+      <circle cx="-2" cy="-21" r="1" fill="#14100a"/><circle cx="2.5" cy="-21" r="1" fill="#14100a"/>
+      <circle cx="7" cy="-3" r="3" fill="#f2ecd6"/>
+    </g>
+    <!-- лиса с пышным хвостом -->
+    <g transform="translate(700,698) scale(1.1)">
+      <path d="M-14,-8 Q-30,-16 -34,-4 Q-28,2 -18,-2 Z" fill="#c96b32"/>
+      <path d="M-31,-11 q-5,2 -3,7 q4,1 6,-3 Z" fill="#f2ecd6"/>
+      <ellipse cx="0" cy="-9" rx="15" ry="8" fill="#c96b32"/>
+      <circle cx="13" cy="-14" r="6" fill="#c96b32"/>
+      <path d="M17,-13 q6,2 7,4 l-8,1 Z" fill="#e8925a"/>
+      <path d="M9,-19 l2,-6 4,5 Z" fill="#c96b32"/><path d="M15,-20 l3,-5 3,6 Z" fill="#c96b32"/>
+      <ellipse cx="4" cy="-5" rx="7" ry="4" fill="#f2ecd6"/>
+      <circle cx="14" cy="-15" r="1.1" fill="#14100a"/>
+      <rect x="-9" y="-3" width="3.4" height="8" fill="#8a4520"/><rect x="6" y="-3" width="3.4" height="8" fill="#8a4520"/>
+    </g>
+    <!-- барсук -->
+    <g transform="translate(838,700) scale(1.15)">
+      <ellipse cx="0" cy="-9" rx="16" ry="8.5" fill="#7d7f83"/>
+      <circle cx="14" cy="-11" r="6.5" fill="#ece8e0"/>
+      <path d="M10,-16 q4,7 2,11 l4,0 q3,-6 -1,-12 Z" fill="#2c2c30"/>
+      <path d="M17,-15 q4,5 3,9 l3,-1 q1,-5 -2,-9 Z" fill="#2c2c30"/>
+      <circle cx="21" cy="-9" r="1.6" fill="#14100a"/>
+      <circle cx="15" cy="-13" r="1" fill="#14100a"/>
+      <rect x="-11" y="-3" width="3.6" height="7" fill="#4a4a4e"/><rect x="-3" y="-2" width="3.6" height="6" fill="#4a4a4e"/>
+      <rect x="5" y="-2" width="3.6" height="6" fill="#4a4a4e"/>
+    </g>
+    <!-- ЖОПА С УШАМИ — легендарный зверь -->
+    <g transform="translate(1100,655) scale(1.9)">
+      <rect x="-8" y="-6" width="5" height="7" rx="1.5" fill="#e8a0a0"/>
+      <rect x="3" y="-6" width="5" height="7" rx="1.5" fill="#e8a0a0"/>
+      <circle cx="-6" cy="-16" r="9.5" fill="#f0b4b4" stroke="#c07878" stroke-width="1"/>
+      <circle cx="6" cy="-16" r="9.5" fill="#f0b4b4" stroke="#c07878" stroke-width="1"/>
+      <path d="M0,-24 L0,-8" stroke="#c07878" stroke-width="1"/>
+      <ellipse cx="-10" cy="-30" rx="4.5" ry="8.5" fill="#f0b4b4" stroke="#c07878" stroke-width="1" transform="rotate(-17 -10 -30)"/>
+      <ellipse cx="10" cy="-30" rx="4.5" ry="8.5" fill="#f0b4b4" stroke="#c07878" stroke-width="1" transform="rotate(17 10 -30)"/>
+      <ellipse cx="-10" cy="-30" rx="2.2" ry="5.5" fill="#d88888" transform="rotate(-17 -10 -30)"/>
+      <ellipse cx="10" cy="-30" rx="2.2" ry="5.5" fill="#d88888" transform="rotate(17 10 -30)"/>
+      <circle cx="-5" cy="-19" r="2.6" fill="#fff"/><circle cx="5" cy="-19" r="2.6" fill="#fff"/>
+      <circle cx="-4.4" cy="-19" r="1.2" fill="#14100a"/><circle cx="5.6" cy="-19" r="1.2" fill="#14100a"/>
+    </g>
+    <!-- мухоморы и светящиеся грибы -->
+    <g transform="translate(305,690)">
+      <circle cx="0" cy="-8" r="16" fill="url(#glowC)"/>
+      <rect x="-3" y="-10" width="6" height="10" rx="2" fill="#e8e0c8"/>
+      <path d="M-10,-9 Q0,-24 10,-9 Z" fill="#c23b30"/>
+      <circle cx="-4" cy="-13" r="1.5" fill="#fff"/><circle cx="3" cy="-16" r="1.5" fill="#fff"/><circle cx="0" cy="-11" r="1.2" fill="#fff"/>
+      <rect x="9" y="-7" width="4" height="7" rx="1.5" fill="#e8e0c8"/>
+      <path d="M4,-6 Q11,-16 18,-6 Z" fill="#c23b30"/><circle cx="10" cy="-9" r="1.2" fill="#fff"/>
+    </g>
+    <g transform="translate(950,688)">
+      <circle cx="0" cy="-8" r="18" fill="url(#glowC)"/>
+      <rect x="-3" y="-11" width="6" height="11" rx="2" fill="#d8e8e0"/>
+      <path d="M-11,-10 Q0,-26 11,-10 Z" fill="#4aa8c2"/>
+      <circle cx="-4" cy="-14" r="1.4" fill="#d8f4ff" class="tw"/><circle cx="4" cy="-16" r="1.4" fill="#d8f4ff" class="tw" style="animation-delay:1s"/>
+    </g>
+    <g transform="translate(135,690)">
+      <rect x="-2.5" y="-8" width="5" height="8" rx="2" fill="#e0d4b0"/>
+      <ellipse cx="0" cy="-9" rx="8" ry="4.5" fill="#8a6b3f"/>
+    </g>
+    <!-- ягодные кусты -->
+    <g transform="translate(360,706)">
+      <circle cx="0" cy="-6" r="9" fill="#3f7228"/><circle cx="8" cy="-4" r="7" fill="#498232"/>
+      <circle cx="-3" cy="-8" r="2" fill="#d63b30"/><circle cx="3" cy="-4" r="2" fill="#d63b30"/><circle cx="8" cy="-7" r="2" fill="#d63b30"/>
+    </g>
+    <g transform="translate(1230,690)">
+      <circle cx="0" cy="-7" r="10" fill="#3f7228"/><circle cx="-9" cy="-4" r="7" fill="#498232"/>
+      <circle cx="-4" cy="-9" r="2.2" fill="#d63b30"/><circle cx="3" cy="-5" r="2.2" fill="#d63b30"/><circle cx="-9" cy="-6" r="2" fill="#d63b30"/>
+    </g>
+    <g transform="translate(650,712)">
+      <circle cx="0" cy="-5" r="8" fill="#3f7228"/>
+      <circle cx="-3" cy="-7" r="2" fill="#7a4ac2"/><circle cx="3" cy="-4" r="2" fill="#7a4ac2"/>
+    </g>
     <!-- цветы на поляне -->
     <g>
-      <circle cx="330" cy="640" r="6" fill="#ffd9e8"/><circle cx="420" cy="650" r="5" fill="#fff3b8"/>
-      <circle cx="620" cy="680" r="6" fill="#ffd9e8"/><circle cx="760" cy="640" r="5" fill="#fff"/>
-      <circle cx="980" cy="665" r="6" fill="#fff3b8"/><circle cx="1120" cy="620" r="5" fill="#ffd9e8"/>
-      <circle cx="120" cy="660" r="5" fill="#fff"/><circle cx="530" cy="615" r="5" fill="#fff"/>
+      <circle cx="330" cy="640" r="6" fill="#ffd9e8"/><circle cx="490" cy="660" r="5" fill="#fff3b8"/>
+      <circle cx="620" cy="680" r="6" fill="#ffd9e8"/><circle cx="760" cy="655" r="5" fill="#fff"/>
+      <circle cx="1000" cy="650" r="6" fill="#fff3b8"/><circle cx="1180" cy="625" r="5" fill="#ffd9e8"/>
+      <circle cx="120" cy="670" r="5" fill="#fff"/><circle cx="905" cy="670" r="5" fill="#fff"/>
     </g>
-    <!-- волшебные светляки -->
+    <!-- волшебные светляки с ореолами -->
     <g fill="#fff9c8">
-      <circle class="tw" cx="300" cy="330" r="4"/><circle class="tw" cx="520" cy="270" r="3" style="animation-delay:.5s"/>
-      <circle class="tw" cx="720" cy="330" r="4" style="animation-delay:1.1s"/><circle class="tw" cx="900" cy="250" r="3" style="animation-delay:1.7s"/>
-      <circle class="tw" cx="1060" cy="360" r="4" style="animation-delay:.8s"/><circle class="tw" cx="180" cy="430" r="3" style="animation-delay:2s"/>
-      <circle class="tw" cx="640" cy="440" r="3" style="animation-delay:1.4s"/><circle class="tw" cx="450" cy="380" r="3" style="animation-delay:2.3s"/>
-      <circle class="tw" cx="820" cy="410" r="3" style="animation-delay:.2s"/>
+      <g class="tw"><circle cx="300" cy="330" r="9" opacity=".3"/><circle cx="300" cy="330" r="3.5"/></g>
+      <g class="tw" style="animation-delay:.5s"><circle cx="520" cy="270" r="8" opacity=".3"/><circle cx="520" cy="270" r="3"/></g>
+      <g class="tw" style="animation-delay:1.1s"><circle cx="720" cy="330" r="9" opacity=".3"/><circle cx="720" cy="330" r="3.5"/></g>
+      <g class="tw" style="animation-delay:1.7s"><circle cx="900" cy="250" r="8" opacity=".3"/><circle cx="900" cy="250" r="3"/></g>
+      <g class="tw" style="animation-delay:.8s"><circle cx="1060" cy="360" r="9" opacity=".3"/><circle cx="1060" cy="360" r="3.5"/></g>
+      <g class="tw" style="animation-delay:2s"><circle cx="180" cy="430" r="8" opacity=".3"/><circle cx="180" cy="430" r="3"/></g>
+      <g class="tw" style="animation-delay:2.6s" fill="#c8f0ff"><circle cx="255" cy="555" r="8" opacity=".3"/><circle cx="255" cy="555" r="3"/></g>
+      <g class="tw" style="animation-delay:1.4s" fill="#c8f0ff"><circle cx="1035" cy="480" r="8" opacity=".3"/><circle cx="1035" cy="480" r="3"/></g>
+      <g class="tw" style="animation-delay:.2s" fill="#c8f0ff"><circle cx="65" cy="380" r="8" opacity=".3"/><circle cx="65" cy="380" r="3"/></g>
+      <g class="tw" style="animation-delay:3.1s"><circle cx="1225" cy="330" r="8" opacity=".3"/><circle cx="1225" cy="330" r="3"/></g>
+      <g class="tw" style="animation-delay:1.9s"><circle cx="500" cy="690" r="7" opacity=".3"/><circle cx="500" cy="690" r="2.5"/></g>
+      <g class="tw" style="animation-delay:2.9s"><circle cx="780" cy="700" r="7" opacity=".3"/><circle cx="780" cy="700" r="2.5"/></g>
     </g>
   </svg>
 </div>
