@@ -614,6 +614,9 @@ function scheduleBar(bar, t0) {
 let nextBarT = 0, barIdx = 0, schedTimer = null;
 function startMusic() {
   AC = new (window.AudioContext || window.webkitAudioContext)();
+  // iOS Safari: контекст может родиться suspended даже внутри жеста —
+  // без resume() музыка молчит на телефонах
+  if (AC.state === 'suspended') AC.resume();
   masterGain = AC.createGain();
   masterGain.gain.value = 0.9;
   masterGain.connect(AC.destination);
@@ -906,6 +909,12 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'Escape') location.href = 'index.html';
 });
+
+// страховка для телефонов: если контекст так и остался suspended
+// (iOS иногда игнорирует resume вне «свежего» жеста), любое касание будит его
+document.addEventListener('touchend', () => {
+  if (AC && AC.state === 'suspended') AC.resume();
+}, { passive: true });
 
 // сенсорные кнопки — те же действия, что клавиши M и R
 document.getElementById('tbSnd').onclick = () => {

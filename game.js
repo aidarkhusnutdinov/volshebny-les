@@ -5,12 +5,18 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let VW = 0,
   VH = 0;
+// высота верхней полосы HUD на сенсорных экранах: камера центрирует героя
+// в видимой области ПОД полосой; на десктопе всегда 0 — поведение прежнее
+let topBarH = 0;
 function resize() {
   // на сенсорных устройствах рисуем с учётом devicePixelRatio (чёткость),
   // на десктопе dpr=1 — поведение в точности прежнее
   const dpr = window.IS_TOUCH ? Math.min(window.devicePixelRatio || 1, 2) : 1;
   VW = window.innerWidth;
   VH = window.innerHeight;
+  topBarH = window.IS_TOUCH
+    ? document.getElementById("hud")?.offsetHeight || 44
+    : 0;
   canvas.width = VW * dpr;
   canvas.height = VH * dpr;
   canvas.style.width = VW + "px";
@@ -455,7 +461,11 @@ function announce(msg, color) {
   bannerEl.style.color = color || "#ffd76e";
   bannerEl.classList.add("show");
   clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => bannerEl.classList.remove("show"), 3400);
+  // на телефоне баннер — маленькая плашка, держим её короче, чтоб не мешала
+  bannerTimer = setTimeout(
+    () => bannerEl.classList.remove("show"),
+    window.IS_TOUCH ? 2200 : 3400,
+  );
 }
 // лечение всегда показывает «+N здоровья» над героем
 function healPlayer(n) {
@@ -3446,9 +3456,9 @@ function update(dt) {
 
   shake = Math.max(0, shake - dt * 22);
 
-  // камера
+  // камера (на таче герой центрируется в области под верхней полосой HUD)
   camX = player.x - VW / 2;
-  camY = player.y - VH / 2;
+  camY = player.y - (VH + topBarH) / 2;
   camX = Math.max(0, Math.min(MAP_W * TILE - VW, camX));
   camY = Math.max(0, Math.min(MAP_H * TILE - VH, camY));
 
@@ -4582,17 +4592,23 @@ function updateHUD() {
     .map((d) => "[" + d.key + "] " + d.icon + "×" + player.items[d.id])
     .join("  ");
   document.getElementById("invline").textContent = inv ? "👜 " + inv : "";
-  // панели не должны заслонять героя и бой: если герой под ними — тают
-  const psx = player.x - camX,
-    psy = player.y - camY;
-  const underPanels = psx > VW - 260 && psy < 470;
-  document.getElementById("minimapPanel").style.opacity = underPanels
-    ? 0.15
-    : 1;
-  document.getElementById("objective").style.opacity = underPanels ? 0.15 : 1;
-  const hudEl = document.getElementById("hud");
-  const underHud = psx < 340 && psy < hudEl.offsetHeight + 80;
-  hudEl.style.opacity = underHud ? 0.15 : 1;
+  // панели не должны заслонять героя и бой: если герой под ними — тают.
+  // Только на десктопе: на таче панель — полоса сверху (герой под ней не бывает),
+  // а миникарта и задание живут в оверлее за кнопкой 🗺
+  if (!window.IS_TOUCH) {
+    const psx = player.x - camX,
+      psy = player.y - camY;
+    const underPanels = psx > VW - 260 && psy < 470;
+    document.getElementById("minimapPanel").style.opacity = underPanels
+      ? 0.15
+      : 1;
+    document.getElementById("objective").style.opacity = underPanels
+      ? 0.15
+      : 1;
+    const hudEl = document.getElementById("hud");
+    const underHud = psx < 340 && psy < hudEl.offsetHeight + 80;
+    hudEl.style.opacity = underHud ? 0.15 : 1;
+  }
   // полоса босса
   let boss = null,
     bd = 520;
@@ -5890,7 +5906,8 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts;
   if (running) {
-    const menuOpen = menuEl.style.display === "block";
+    // мир замирает и при открытом меню, и при открытой тач-карте (🗺 из touch.js)
+    const menuOpen = menuEl.style.display === "block" || window.touchMapOpen;
     if (!menuOpen) update(dt); // пока меню открыто — мир замирает, никто не подкрадётся
     draw();
     if (menuOpen) {
@@ -5901,8 +5918,8 @@ function frame(ts) {
       const pt = "⏸ мир замер — выбери действие";
       ctx.strokeStyle = "rgba(0,0,0,0.8)";
       ctx.lineWidth = 3;
-      ctx.strokeText(pt, VW / 2 - ctx.measureText(pt).width / 2, 64);
-      ctx.fillText(pt, VW / 2 - ctx.measureText(pt).width / 2, 64);
+      ctx.strokeText(pt, VW / 2 - ctx.measureText(pt).width / 2, 64 + topBarH);
+      ctx.fillText(pt, VW / 2 - ctx.measureText(pt).width / 2, 64 + topBarH);
     }
   }
   requestAnimationFrame(frame);

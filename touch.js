@@ -154,8 +154,44 @@
     '<div class="tbtn" id="tbAttack">⚔️</div>' +
     '<div class="tbtn" id="tbInteract">✋</div>' +
     '<div class="tbtn" id="tbMute">🔊</div>' +
+    '<div class="tbtn" id="tbMap">🗺</div>' +
     '<div id="tbHotbar"></div>';
   document.body.appendChild(tui);
+
+  // ---------- карта и задание за кнопкой 🗺 ----------
+  // на телефоне #minimapPanel/#objective/#stats скрыты с экрана (CSS html.touch)
+  // и переезжают в оверлей: game.js продолжает писать в те же элементы.
+  // Пока оверлей открыт, мир на паузе (game.js смотрит на window.touchMapOpen)
+  const mapOv = document.createElement("div");
+  mapOv.id = "mapOverlay";
+  const mwrap = document.createElement("div");
+  mwrap.className = "mwrap";
+  const minfo = document.createElement("div");
+  minfo.className = "minfo";
+  minfo.append(
+    document.getElementById("objective"),
+    document.getElementById("stats"),
+  );
+  mwrap.append(document.getElementById("minimapPanel"), minfo);
+  const mhint = document.createElement("div");
+  mhint.className = "mhint";
+  mhint.textContent = "тап — вернуться в игру";
+  mapOv.append(mwrap, mhint);
+  document.body.appendChild(mapOv);
+
+  window.touchMapOpen = false;
+  function mapShow(on) {
+    window.touchMapOpen = on;
+    mapOv.classList.toggle("show", on);
+  }
+  mapOv.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      mapShow(false);
+    },
+    { passive: false },
+  );
 
   // кнопка срабатывает на touchstart — мгновенный отклик, как просит UX игры
   function bindBtn(el, onDown, onUp) {
@@ -195,6 +231,9 @@
     },
   );
   bindBtn(document.getElementById("tbInteract"), () => interact());
+  bindBtn(document.getElementById("tbMap"), () =>
+    mapShow(!window.touchMapOpen),
+  );
   const muteBtn = document.getElementById("tbMute");
   bindBtn(muteBtn, () => {
     const m = AudioSys.toggleMute();
@@ -225,7 +264,9 @@
   // тач-панель видна только в игре: оверлеи (старт/смерть/победа) её прячут
   const overlayEl = document.getElementById("overlay");
   setInterval(() => {
-    tui.style.display = overlayEl.style.display === "none" ? "block" : "none";
+    const inGame = overlayEl.style.display === "none";
+    tui.style.display = inGame ? "block" : "none";
+    if (!inGame && window.touchMapOpen) mapShow(false); // заставка поверх — карту прочь
     refreshHotbar();
   }, 300);
 
