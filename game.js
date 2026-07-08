@@ -1083,13 +1083,41 @@ function checkVictory() {
         "<p>Но беды на Руси не кончились: недобитая нечисть бежала за овраги — " +
         "в соседний лес, что был Волшебному родным братом. С полуночи уже тянет гнилью: " +
         "чаща та почернела, и оттуда не вернулся ещё ни один. Богатырская дорога зовёт дальше.</p>" +
-        '<p style="text-align:center;color:#ffd76e">Уровень ' +
+        // тропа-прогресс: две земли, ты переходишь ко второй
+        '<div class="ovtrack" aria-hidden="true">' +
+        '<span class="land done">Волшебный лес&nbsp;✔</span>' +
+        '<span class="dot cur"></span><span class="line"></span><span class="dot next"></span>' +
+        '<span class="land next">Тёмный лес</span></div>' +
+        // живой пик тёмного леса — заполняется ниже клоном #sceneTplDark
+        '<div class="l2peek" id="l2peek"></div>' +
+        '<p style="text-align:center;color:#ffd76e;margin-top:14px">Уровень ' +
         player.level +
         " · соратников: " +
         player.pets.length +
         "</p>",
-      "В ТЁМНЫЙ ЛЕС",
+      "В ТЁМНЫЙ ЛЕС ›",
     );
+    // усиливаем «это глава первая, история продолжается» — приём как в l2Victory():
+    const box = document.querySelector("#overlay .box");
+    const h1 = box && box.querySelector("h1");
+    if (h1)
+      h1.insertAdjacentHTML(
+        "beforebegin",
+        '<div class="ovkicker">Глава первая пройдена</div>',
+      );
+    const peek = document.getElementById("l2peek");
+    const dark = document.getElementById("sceneTplDark");
+    if (peek && dark)
+      peek.innerHTML =
+        dark.innerHTML + '<span class="l2peek-cap">Впереди — Тёмный лес</span>';
+    const btn = document.getElementById("startBtn");
+    if (btn) {
+      btn.classList.add("cont");
+      btn.insertAdjacentHTML(
+        "afterend",
+        '<div class="btn-note">История не окончена — глава вторая ждёт</div>',
+      );
+    }
   }
 }
 

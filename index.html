@@ -103,6 +103,24 @@ if (window.IS_TOUCH) document.documentElement.classList.add("touch");
   #overlay button{margin-top:22px;font-family:inherit;font-size:20px;padding:12px 46px;background:linear-gradient(180deg,#8c1f16,#5e120c);color:#f5e6b8;border:2px solid #c9a94f;border-radius:8px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 14px rgba(0,0,0,.7);}
   #overlay button:hover{background:linear-gradient(180deg,#a8291e,#701710);}
   .goldword{color:#ffd76e;}
+  /* ---------- усиленный экран победы ур.1: «глава первая, продолжение» ---------- */
+  #overlay .ovkicker{font-size:13px;letter-spacing:4px;text-transform:uppercase;color:#ffd76e;opacity:.85;margin:0 0 6px;text-shadow:0 2px 6px rgba(0,0,0,.6);animation:kfade .8s ease both;}
+  #overlay .ovtrack{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:16px 0 2px;font-size:12.5px;letter-spacing:.5px;animation:kfade .8s ease .15s both;}
+  #overlay .ovtrack .land{color:#8f8a72;}
+  #overlay .ovtrack .land.done{color:#a8c46a;}
+  #overlay .ovtrack .land.next{color:#c9a0e8;}
+  #overlay .ovtrack .dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  #overlay .ovtrack .dot.cur{background:#ffd76e;box-shadow:0 0 8px 2px rgba(255,215,110,.7);}
+  #overlay .ovtrack .dot.next{background:transparent;border:2px solid #6a5a80;box-sizing:border-box;}
+  #overlay .ovtrack .line{width:34px;height:2px;background:linear-gradient(90deg,#ffd76e,#6a5a80);display:inline-block;}
+  #overlay .l2peek{position:relative;max-width:360px;aspect-ratio:16/9;margin:14px auto 2px;border:2px solid #4a3560;border-radius:8px;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.6),inset 0 0 26px rgba(18,8,30,.7);animation:kfade .8s ease .25s both;}
+  #overlay .l2peek svg{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  #overlay .l2peek-cap{position:absolute;left:0;right:0;bottom:0;padding:5px 0 6px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#d9c8f0;background:linear-gradient(0deg,rgba(6,3,14,.88),rgba(6,3,14,0));text-shadow:0 1px 4px #000;}
+  #overlay #startBtn.cont{background:linear-gradient(180deg,#e7c55e,#a6841f);color:#3a2c10;border-color:#ffe89a;text-shadow:0 1px 0 rgba(255,244,190,.5);animation:ctapulse 1.6s ease-in-out infinite;}
+  #overlay #startBtn.cont:hover{background:linear-gradient(180deg,#f4d873,#bd9526);}
+  #overlay .btn-note{margin-top:8px;font-size:12.5px;font-style:italic;color:#c9a94f;opacity:.9;}
+  @keyframes kfade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  @keyframes ctapulse{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 0 0 rgba(255,215,110,.5);}50%{box-shadow:0 4px 14px rgba(0,0,0,.7),0 0 22px 5px rgba(255,215,110,.55);}}
   /* ---------- сенсорное управление (класс .touch на <html> ставит инлайн-скрипт выше) ---------- */
   #joyBase,#joyKnob{display:none;position:fixed;border-radius:50%;pointer-events:none;z-index:39;transform:translate(-50%,-50%);}
   #joyBase{width:110px;height:110px;border:2px solid rgba(201,169,79,.5);background:rgba(20,15,7,.25);}
@@ -148,6 +166,11 @@ if (window.IS_TOUCH) document.documentElement.classList.add("touch");
     #overlay h2{font-size:14px;margin-bottom:12px;}
     #overlay p{font-size:13px;line-height:1.6;}
     #overlay button{font-size:17px;padding:10px 34px;margin-top:14px;}
+    #overlay .ovkicker{font-size:11px;letter-spacing:3px;}
+    #overlay .ovtrack{font-size:11px;gap:6px;margin:10px 0 2px;}
+    #overlay .ovtrack .line{width:22px;}
+    #overlay .l2peek{max-width:min(320px,74vw);margin:10px auto 2px;}
+    #overlay .btn-note{font-size:11.5px;}
   }
   .touch #ctxmenu{min-width:240px;}
   .touch #ctxmenu .opt{padding:12px;font-size:16px;}
